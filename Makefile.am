@@ -1,19 +1,33 @@
-
 ## Process this file with automake to produce Makefile.in
 
-AUTOMAKE_OPTIONS     = 1.4 foreign
+SUBDIRS = src proj
 
-# A list of all the files in the current directory which can be regenerated
-MAINTAINERCLEANFILES = INSTALL Makefile.in aclocal.m4 config.guess \
-		       config.h.in config.sub configure install-sh \
+MAINTAINERCLEANFILES = Makefile.in aclocal.m4 config.guess \
+                       config.h.in config.sub configure install-sh \
 		       ltconfig ltmain.sh missing mkinstalldirs \
-		       stamp-h.in
+		       stamp-h.in evas_docs.tar evas_docs.tar.gz evas.c
 
-SUBDIRS		     = src test doc debian
+install-data-local:
+	@$(NORMAL_INSTALL)
+	if test -d $(srcdir)/data; then \
+	  $(mkinstalldirs) $(DESTDIR)$(pkgdatadir)/data; \
+	  for d in $(srcdir)/data/*; do \
+	      cp -pR $$d $(DESTDIR)$(pkgdatadir)/data; \
+	  done \
+	fi
+
+dist-hook:
+	./gendoc; \
+	tar cvf evas_docs.tar doc; \
+	rm -f evas_docs.tar.gz; \
+	gzip -9 evas_docs.tar; \
+	if test -d data; then \
+	  mkdir $(distdir)/data; \
+	  for d in data/*; do \
+	      cp -pR $$d $(distdir)/data; \
+	  done \
+	fi
 
 bin_SCRIPTS = evas-config
 
-EXTRA_DIST = README AUTHORS COPYING evas.spec evas.m4 FAQ-EVAS
-
-m4datadir = @aclocaldir@
-m4data_DATA = evas.m4
+EXTRA_DIST = TODO README AUTHORS COPYING COPYING-PLAIN evas.spec evas.c.in gendoc Doxyfile evas_docs.tar.gz
