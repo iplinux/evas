@@ -1,3 +1,9 @@
+evas (0.9.9.050-20090103-1) unstable; urgency=low
+
+  * OI build
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Sat, 03 Jan 2009 18:55:11 +0000
+
 evas (0.9.9.050-1) unstable; urgency=low
 
   * a SVN release.

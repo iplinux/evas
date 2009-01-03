@@ -8,26 +8,30 @@ DEB_MAKE_CLEAN_TARGET := clean
 #DEB_INSTALL_MANPAGES_libevas-doc := $(DEB_SRCDIR)/doc/man/man3/*.3
 DEB_DH_STRIP_ARGS := --dbg-package=libevas-dbg
 
-DEB_CONFIGURE_EXTRA_FLAGS := --enable-strict \
+DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) \
+	--enable-strict \
 	--enable-fontconfig \
-	--enable-software-x11 \
-	--enable-fb \
+	--disable-software-x11 \
+	--disable-software-16-x11 \
+	--enable-software-xcb \
+	--disable-fb \
 	--enable-buffer \
-	--enable-gl-x11 \
-	--enable-xrender-x11 \
-	--enable-directfb \
+	--disable-gl-x11 \
+	--disable-xrender-x11 \
+	--disable-directfb \
 	--enable-image-loader-gif \
 	--enable-image-loader-png \
 	--enable-image-loader-jpeg \
 	--enable-image-loader-eet \
 	--enable-font-loader-eet \
-	--enable-image-loader-tiff \
-	--enable-image-loader-xpm \
-	--enable-image-loader-svg \
+	--disable-image-loader-pmaps \
+	--disable-image-loader-tiff \
+	--disable-image-loader-xpm \
+	--disable-image-loader-svg \
 	--enable-scale-sample \
 	--enable-scale-smooth \
 	--enable-convert-yuv \
-	--enable-small-dither-mask \
+	--disable-small-dither-mask \
 	--enable-no-dither-mask \
 	--enable-convert-8-rgb-332 \
 	--enable-convert-8-rgb-666 \
@@ -58,13 +62,6 @@ DEB_CONFIGURE_EXTRA_FLAGS := --enable-strict \
 	--disable-rpath \
 	--enable-pthreads \
 	--disable-image-loader-edb
-
-build/libevas-doc::
-	cd $(DEB_SRCDIR) && ./gendoc
-
-install/libevas-doc::
-	cp -R $(DEB_SRCDIR)/doc/html debian/libevas-doc/usr/share/doc/libevas-doc/
-	cd $(DEB_SRCDIR)/doc/man/man3 && ls -1 | grep -vi evas | xargs rm
 
 clean::
 	rm -rf $(DEB_SRCDIR)/doc/html $(DEB_SRCDIR)/doc/latex $(DEB_SRCDIR)/doc/man

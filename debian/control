@@ -1,16 +1,23 @@
 Source: evas
-Section: libs
+Section: gui
 Priority: optional
-Maintainer: Falko Schmidt <falko@alphagemini.org>
+Maintainer: Alexander Kerner <lunohod@openinkpot.org>
 Build-Depends: debhelper (>= 6), cdbs, libeet-dev, libfreetype6-dev, libpng12-dev | libpng-dev, libx11-dev, libxrender-dev, x11proto-xext-dev, zlib1g, libjpeg62-dev, libtiff4-dev, libgif-dev, libfontconfig1-dev, libglu1-mesa-dev, mesa-common-dev, libxpm-dev, librsvg2-dev, doxygen
 Standards-Version: 3.7.3
 Homepage: http://www.enlightenment.org
+XCS-Cross-Host-Build-Depends: debhelper (>= 5), cdbs
+XCS-Cross-Build-Depends: libeet-dev, libfreetype6-dev, libpng12-dev | libpng-dev, zlib1g, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
+# libtiff4-dev, libxpm-dev, librsvg2-dev, 
+XS-Vcs-Git: http://git.openinkpot.org/evas.git
+XS-Vcs-Browser: http://git.openinkpot.org/evas.git
 
 Package: libevas0
 Architecture: any
 Depends: ${shlibs:Depends}, libevas-engines
-Provides: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-loader-tiff, libevas-loader-xpm, libevas-loader-svg, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg, libevas-saver-tiff
-Replaces: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-loader-tiff, libevas-loader-xpm, libevas-loader-svg, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg, libevas-saver-tiff
+Provides: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg
+#libevas-saver-tiff, libevas-loader-tiff, libevas-loader-xpm, libevas-loader-svg 
+Replaces: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg
+#libevas-saver-tiff, libevas-loader-tiff, libevas-loader-xpm, libevas-loader-svg 
 Recommends: libevas-engines-extras
 Description: enlightenment advanced canvas library
  Evas is an advanced canvas library, providing six engines for rendering: X11,
@@ -20,24 +27,10 @@ Description: enlightenment advanced canvas library
  .
  This package contains the core library.
 
-Package: libevas-doc
-Architecture: all
-Section: doc
-Enhances: libevas-dev
-Description: Evas API Documentation
- Evas is an advanced canvas library, providing six engines for rendering: X11,
- OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
- and Qtopia.
- Due to its simple API, evas can be developed with rapidly, and cleanly.
- .
- This package provides development documentation (html and manpages) for the
- Evas library.
-
 Package: libevas-dev
 Section: libdevel
 Architecture: any
-Depends: libevas0 (= ${binary:Version}), libjpeg62-dev, libx11-dev, libfreetype6-dev, libfontconfig1-dev, libeet-dev, pkg-config
-Suggests: libevas-doc
+Depends: libevas0 (= ${binary:Version}), libjpeg62-dev, libfreetype6-dev, libfontconfig1-dev, libeet-dev
 Description: Enlightenment DR17 advanced canvas library development files
  Evas is an advanced canvas library, providing six engines for rendering: X11,
  OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
@@ -49,7 +42,7 @@ Description: Enlightenment DR17 advanced canvas library development files
 
 Package: libevas-dbg
 Architecture: any
-Section: libdevel
+Section: debug
 Depends: libevas0 (= ${binary:Version})
 Priority: extra
 Description: enlightenment advanced canvas library
@@ -65,8 +58,8 @@ Description: enlightenment advanced canvas library
 
 Package: libevas-engines
 Architecture: any
-Provides: libevas-engine-buffer, libevas-engine-software-generic, libevas-engine-software-x11, libevas-engine-xrender
-Replaces: libevas-engine-buffer, libevas-engine-software-generic, libevas-engine-software-x11, libevas-engine-xrender
+Provides: libevas-engine-buffer, libevas-engine-software-generic, libevas-engine-software-xcb
+Replaces: libevas-engine-buffer, libevas-engine-software-generic, libevas-engine-software-xcb
 Description: virtual package providing important Evas engine modules
  Evas is an advanced canvas library, providing six engines for rendering: X11,
  OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
@@ -76,20 +69,4 @@ Description: virtual package providing important Evas engine modules
  This package will install the following Evas engine modules:
   - buffer
   - software/genenric
-  - software/X11
-  - xrender/X11
-
-Package: libevas-engines-extras
-Architecture: any
-Provides: libevas-engine-fb, libevas-engine-gl-x11, libevas-engine-directfb, libevas-engines-extra
-Replaces: libevas-engine-fb, libevas-engine-gl-x11, libevas-engines-extra
-Description: virtual package providing optional Evas engine modules
- Evas is an advanced canvas library, providing six engines for rendering: X11,
- OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
- and Qtopia.
- Due to its simple API, evas can be developed with rapidly, and cleanly.
- .
- This package will install the following Evas engine modules:
-  - GL/X11
-  - Framebuffer
-  - DirectFB
+  - software/XCB
