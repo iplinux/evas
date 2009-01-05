@@ -11,8 +11,6 @@ AM_CPPFLAGS = \
 @evas_engine_software_x11_cflags@ \
 @evas_engine_software_xcb_cflags@
 
-if BUILD_ENGINE_SOFTWARE_X11 or BUILD_ENGINE_SOFTWARE_XCB
-
 pkgdir = $(libdir)/evas/modules/engines/software_x11/$(MODULE_ARCH)
 
 pkg_LTLIBRARIES	= module.la
@@ -45,8 +43,6 @@ module_la_LDFLAGS = -module -avoid-version
 module_la_LIBTOOLFLAGS = --tag=disable-static
 
 include_HEADERS = Evas_Engine_Software_X11.h
-
-endif
 
 EXTRA_DIST = \
 evas_engine.h \
