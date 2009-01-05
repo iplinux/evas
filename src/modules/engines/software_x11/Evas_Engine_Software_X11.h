@@ -1,7 +1,9 @@
 #ifndef _EVAS_ENGINE_SOFTWARE_X11_H
 #define _EVAS_ENGINE_SOFTWARE_X11_H
 
+#ifdef BUILD_ENGINE_SOFTWARE_X11
 #include <X11/Xlib.h>
+#endif
 
 typedef struct _Evas_Engine_Info_Software_X11 Evas_Engine_Info_Software_X11;
 
