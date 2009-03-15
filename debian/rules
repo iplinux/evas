@@ -26,7 +26,7 @@ DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) \
 	--enable-font-loader-eet \
 	--disable-image-loader-pmaps \
 	--disable-image-loader-tiff \
-	--disable-image-loader-xpm \
+	--enable-image-loader-xpm \
 	--disable-image-loader-svg \
 	--enable-scale-sample \
 	--enable-scale-smooth \

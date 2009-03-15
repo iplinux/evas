@@ -2,22 +2,23 @@ Source: evas
 Section: gui
 Priority: optional
 Maintainer: Alexander Kerner <lunohod@openinkpot.org>
-Build-Depends: debhelper (>= 6), cdbs, libeet-dev, libfreetype6-dev, libpng12-dev | libpng-dev, libx11-dev, libxrender-dev, x11proto-xext-dev, zlib1g, libjpeg62-dev, libtiff4-dev, libgif-dev, libfontconfig1-dev, libglu1-mesa-dev, mesa-common-dev, libxpm-dev, librsvg2-dev, doxygen
+Build-Depends: debhelper (>= 6), cdbs, cdbs-embedded, libeet-dev, libfreetype6-dev, libpng12-dev | libpng-dev, libx11-dev, libxrender-dev, x11proto-xext-dev, zlib1g-dev | libz1-dev, libjpeg62-dev, libtiff4-dev, libgif-dev, libfontconfig1-dev, libglu1-mesa-dev, mesa-common-dev, libxpm-dev, librsvg2-dev, doxygen, pkg-config, automake, libtool
 Standards-Version: 3.7.3
 Homepage: http://www.enlightenment.org
-XCS-Cross-Host-Build-Depends: debhelper (>= 5), cdbs
-XCS-Cross-Build-Depends: libeet-dev, libfreetype6-dev, libpng12-dev | libpng-dev, zlib1g, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
+XCS-Cross-Host-Build-Depends: debhelper (>= 5), cdbs, cdbs-embedded, pkg-config, automake, libtool
+XCS-Cross-Build-Depends: libeet-dev, libfreetype6-dev, libpng12-dev | libpng-dev, libz1-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
 # libtiff4-dev, libxpm-dev, librsvg2-dev, 
 XS-Vcs-Git: http://git.openinkpot.org/evas.git
 XS-Vcs-Browser: http://git.openinkpot.org/evas.git
+Format: 3.0 (native)
 
 Package: libevas0
 Architecture: any
 Depends: ${shlibs:Depends}, libevas-engines
-Provides: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg
-#libevas-saver-tiff, libevas-loader-tiff, libevas-loader-xpm, libevas-loader-svg 
-Replaces: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg
-#libevas-saver-tiff, libevas-loader-tiff, libevas-loader-xpm, libevas-loader-svg 
+Provides: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg, libevas-loader-xpm
+#libevas-saver-tiff, libevas-loader-tiff, libevas-loader-svg
+Replaces: libevas, libevas-loaders, libevas-savers, libevas-loader-eet, libevas-loader-png, libevas-loader-jpeg, libevas-loader-gif, libevas-saver-eet, libevas-saver-png, libevas-saver-jpeg, libevas-loader-xpm 
+#libevas-saver-tiff, libevas-loader-tiff, libevas-loader-svg
 Recommends: libevas-engines-extras
 Description: enlightenment advanced canvas library
  Evas is an advanced canvas library, providing six engines for rendering: X11,

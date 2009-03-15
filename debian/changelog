@@ -1,3 +1,13 @@
+evas (0.9.9.050-20090103-2) asimov; urgency=low
+
+  * IPlinux build
+  * unstable -> asimov
+  * cdbs-embedded dependency added
+  * deleted debian/shlibs.local
+  * enabled XPM
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Sun, 15 Mar 2009 01:54:30 +0100
+
 evas (0.9.9.050-20090103-1) unstable; urgency=low
 
   * OI build
