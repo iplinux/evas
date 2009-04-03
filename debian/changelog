@@ -1,3 +1,9 @@
+evas (0.9.9.050-20090103-4+b1) asimov; urgency=low
+
+  * Rebuild with new toolchain.
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Fri, 03 Apr 2009 16:15:51 +0200
+
 evas (0.9.9.050-20090103-4) asimov; urgency=low
 
   * Fixed libevas-engines dependencies
