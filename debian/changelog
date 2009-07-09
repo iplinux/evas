@@ -1,3 +1,10 @@
+evas (0.9.9.050-20090103-5) asimov; urgency=low
+ 
+  [ Mikhail Gusarov ]
+  * Fix evas_common_font_utf8_get_prev to work on non-ASCII strings
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Thu, 09 Jul 2009 18:51:00 +0200
+
 evas (0.9.9.050-20090103-4+b1) asimov; urgency=low
 
   * Rebuild with new toolchain.
