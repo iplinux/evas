@@ -75,6 +75,9 @@ static const Evas_Object_Func object_func =
      evas_object_gradient_was_opaque,
      NULL,
      NULL,
+     NULL,
+     NULL,
+     NULL,
      NULL
 };
 
@@ -236,7 +239,7 @@ evas_object_gradient_clear(Evas_Object *obj)
  * @param   has_alpha A flag indicating if the data has alpha or not.
  */
 EAPI void
-evas_object_gradient_color_data_set(Evas_Object *obj, void *data, int len, Evas_Bool has_alpha)
+evas_object_gradient_color_data_set(Evas_Object *obj, void *data, int len, Eina_Bool has_alpha)
 {
    Evas_Object_Gradient *o;
 
@@ -898,7 +901,6 @@ evas_object_gradient_render(Evas_Object *obj, void *output, void *context, void 
 static void
 evas_object_gradient_render_pre(Evas_Object *obj)
 {
-   Evas_Rectangles rects = { 0, 0, NULL };
    Evas_Object_Gradient *o;
    int is_v, was_v;
 
@@ -989,17 +991,17 @@ evas_object_gradient_render_pre(Evas_Object *obj)
    was_v = evas_object_was_visible(obj);
    if (is_v != was_v)
      {
-	evas_object_render_pre_visible_change(&rects, obj, is_v, was_v);
+	evas_object_render_pre_visible_change(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 	goto done;
      }
    /* its not visible - we accounted for it appearing or not so just abort */
    if (!is_v) goto done;
    /* clipper changed this is in addition to anything else for obj */
-   evas_object_render_pre_clipper_change(&rects, obj);
+   evas_object_render_pre_clipper_change(&obj->layer->evas->clip_changes, obj);
    /* gradient changed */
    if (o->changed || obj->restack)
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed geometry */
@@ -1008,7 +1010,7 @@ evas_object_gradient_render_pre(Evas_Object *obj)
        (obj->cur.geometry.w != obj->prev.geometry.w) ||
        (obj->cur.geometry.h != obj->prev.geometry.h))
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* it obviously didn't change - add a NO obscure - this "unupdates"  this */
@@ -1024,7 +1026,7 @@ evas_object_gradient_render_pre(Evas_Object *obj)
 							    obj->cur.cache.clip.h);
    
    done:
-   evas_object_render_pre_effect_updates(&rects, obj, is_v, was_v);
+   evas_object_render_pre_effect_updates(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 }
 
 static void
@@ -1037,14 +1039,7 @@ evas_object_gradient_render_post(Evas_Object *obj)
    /* data anymore we can free it if the object deems this is a good idea */
    o = (Evas_Object_Gradient *)(obj->object_data);
    /* remove those pesky changes */
-   while (obj->clip.changes)
-     {
-	Evas_Rectangle *r;
-
-	r = (Evas_Rectangle *)obj->clip.changes->data;
-	obj->clip.changes = eina_list_remove(obj->clip.changes, r);
-	free(r);
-     }
+   evas_object_clip_changes_clean(obj);
    /* move cur to prev safely for object data */
    obj->prev = obj->cur;
    if (o->prev.type.name && (o->prev.type.name != o->cur.type.name))

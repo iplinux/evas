@@ -48,7 +48,7 @@ struct _Render_Engine
 
 static void *eng_info(Evas *e);
 static void eng_info_free(Evas *e, void *info);
-static void eng_setup(Evas *e, void *info);
+static int eng_setup(Evas *e, void *info);
 static void eng_output_free(void *data);
 static void eng_output_resize(void *data, int w, int h);
 static void eng_output_tile_size_set(void *data, int w, int h);
@@ -142,7 +142,7 @@ _tmp_out_alloc(Render_Engine *re)
 }
 
 
-static void
+static int
 eng_setup(Evas *e, void *in)
 {
    Render_Engine                      *re;
@@ -171,7 +171,7 @@ eng_setup(Evas *e, void *in)
 	/* render engine specific data */
 	re = calloc(1, sizeof(Render_Engine));
         if (!re)
-          return;
+          return 0;
 	e->engine.data.output = re;
 
         switch(info->info.backend)
@@ -182,7 +182,7 @@ eng_setup(Evas *e, void *in)
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_fb_shutdown;
               re->backend_output_buffer_new = evas_software_wince_fb_output_buffer_new;
@@ -196,7 +196,7 @@ eng_setup(Evas *e, void *in)
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_gapi_shutdown;
               re->backend_output_buffer_new = evas_software_wince_gapi_output_buffer_new;
@@ -210,7 +210,7 @@ eng_setup(Evas *e, void *in)
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_ddraw_shutdown;
               re->backend_output_buffer_new = evas_software_wince_ddraw_output_buffer_new;
@@ -220,11 +220,11 @@ eng_setup(Evas *e, void *in)
               break;
            case 4: /* GDI */
               re->backend = EVAS_ENGINE_WINCE_GDI;
-              re->backend_priv = evas_software_wince_gdi_init(info->info.window, info->info.width, info->info.height);
+              re->backend_priv = evas_software_wince_gdi_init(info->info.window, info->info.width, info->info.height, info->info.fullscreen);
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_gdi_shutdown;
               re->backend_output_buffer_new = evas_software_wince_gdi_output_buffer_new;
@@ -234,7 +234,7 @@ eng_setup(Evas *e, void *in)
               break;
            default:
               free(re);
-              return;
+              return 0;
           }
 
 	re->width = e->output.w;
@@ -257,7 +257,7 @@ eng_setup(Evas *e, void *in)
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_fb_shutdown;
               re->backend_output_buffer_new = evas_software_wince_fb_output_buffer_new;
@@ -271,7 +271,7 @@ eng_setup(Evas *e, void *in)
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_gapi_shutdown;
               re->backend_output_buffer_new = evas_software_wince_gapi_output_buffer_new;
@@ -285,7 +285,7 @@ eng_setup(Evas *e, void *in)
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_ddraw_shutdown;
               re->backend_output_buffer_new = evas_software_wince_ddraw_output_buffer_new;
@@ -295,11 +295,11 @@ eng_setup(Evas *e, void *in)
               break;
            case 4: /* GDI */
               re->backend = EVAS_ENGINE_WINCE_GDI;
-              re->backend_priv = evas_software_wince_gdi_init(info->info.window, info->info.width, info->info.height);
+              re->backend_priv = evas_software_wince_gdi_init(info->info.window, info->info.width, info->info.height, info->info.fullscreen);
               if (!re->backend_priv)
                 {
                    free(re);
-                   return;
+                   return 0;
                 }
               re->backend_shutdown = evas_software_wince_gdi_shutdown;
               re->backend_output_buffer_new = evas_software_wince_gdi_output_buffer_new;
@@ -309,7 +309,7 @@ eng_setup(Evas *e, void *in)
               break;
            default:
               free(re);
-              return;
+              return 0;
           }
 
 	re->width = e->output.w;
@@ -324,11 +324,13 @@ eng_setup(Evas *e, void *in)
 	     re->tmp_out = NULL;
 	  }
      }
-   if (!e->engine.data.output) return;
+   if (!e->engine.data.output) return 0;
    /* add a draw context if we dont have one */
    if (!e->engine.data.context)
      e->engine.data.context =
      e->engine.func->context_new(e->engine.data.output);
+
+   return 1;
 }
 
 static void
@@ -701,9 +703,14 @@ eng_output_idle_flush(void *data)
      }
 }
 
+static Eina_Bool
+eng_canvas_alpha_get(void *data, void *context)
+{
+   return EINA_FALSE;
+}
 
 /* module advertising code */
-EAPI int
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -716,6 +723,7 @@ module_open(Evas_Module *em)
    ORD(info);
    ORD(info_free);
    ORD(setup);
+   ORD(canvas_alpha_get);
    ORD(output_free);
    ORD(output_resize);
    ORD(output_tile_size_set);
@@ -731,15 +739,24 @@ module_open(Evas_Module *em)
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
    EVAS_MODULE_API_VERSION,
-   EVAS_MODULE_TYPE_ENGINE,
-   "software_16_wince_fb",
-   "none"
+   "software_16_wince",
+   "none",
+   {
+     module_open,
+     module_close
+   }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, software_16_wince);
+
+#ifndef EVAS_STATIC_BUILD_SOFTWARE_16_WINCE
+EVAS_EINA_MODULE_DEFINE(engine, software_16_wince);
+#endif

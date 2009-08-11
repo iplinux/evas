@@ -5,13 +5,15 @@ MAINTAINERCLEANFILES = Makefile.in
 
 AM_CPPFLAGS	     = -I. \
 		       -I$(top_srcdir)/src/lib \
+		       -I$(top_srcdir)/src/lib/cserve \
 		       -I$(top_srcdir)/src/lib/include \
 		       -DPACKAGE_BIN_DIR=\"$(bindir)\" \
 		       -DPACKAGE_LIB_DIR=\"$(libdir)\" \
 		       -DPACKAGE_DATA_DIR=\"$(datadir)/$(PACKAGE)\" \
 		       @FREETYPE_CFLAGS@ @VALGRIND_CFLAGS@ \
 		       @EET_CFLAGS@ @pthread_cflags@ \
-		       @WIN32_CFLAGS@ @EINA_CFLAGS@
+		       @WIN32_CFLAGS@ @EINA_CFLAGS@ \
+                       @FRIBIDI_CFLAGS@
 
 noinst_LTLIBRARIES      = libevas_engine_common.la
 libevas_engine_common_la_SOURCES  = \
@@ -53,6 +55,7 @@ evas_image_load.c \
 evas_image_save.c \
 evas_image_main.c \
 evas_image_data.c \
+evas_image_scalecache.c \
 evas_line_main.c \
 evas_polygon_main.c \
 evas_rectangle_main.c \
@@ -62,7 +65,10 @@ evas_scale_smooth.c \
 evas_scale_span.c \
 evas_tiler.c \
 evas_regionbuf.c \
-evas_pipe.c
+evas_pipe.c \
+evas_intl_utils.c \
+evas_intl/evas_intl_arabic.c \
+evas_intl/evas_intl_arabic.h
 
 EXTRA_DIST = \
 evas_blend.h \
@@ -97,7 +103,8 @@ evas_scale_smooth_scaler_downy.c \
 evas_scale_smooth_scaler_noscale.c \
 evas_scale_smooth_scaler_up.c \
 evas_scale_span.h \
-evas_pipe.h
+evas_pipe.h \
+evas_intl_utils.h
 
 libevas_engine_common_la_DEPENDENCIES = \
 $(top_builddir)/config.h

@@ -4,9 +4,10 @@
 #include "Evas_Engine_Software_X11.h"
 
 #include "evas_engine.h"
-#ifdef BUILD_ENGINE_SOFTWARE_X11
-#include "evas_xlib_outbuf.h"
-#include "evas_xlib_color.h"
+
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+# include "evas_xlib_outbuf.h"
+# include "evas_xlib_color.h"
 #endif
 
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
@@ -36,21 +37,17 @@ struct _Render_Engine
    void        (*outbuf_free_region_for_update)(Outbuf *ob, RGBA_Image *update);
    void        (*outbuf_flush)(Outbuf *ob);
    void        (*outbuf_idle_flush)(Outbuf *ob);
+   Eina_Bool   (*outbuf_alpha_get)(Outbuf *ob);
 };
 
 /* prototypes we will use here */
-
-#ifdef BUILD_ENGINE_SOFTWARE_X11
-static void *_output_xlib_setup(int w, int h, int rot, Display *disp, Drawable draw, Visual *vis, Colormap cmap, int depth, int debug, int grayscale, int max_colors, Pixmap mask, int shape_dither, int destination_alpha);
-#endif
-
 static void        *_best_visual_get   (int backend, void *connection, int screen);
 static unsigned int _best_colormap_get (int backend, void *connection, int screen);
 static int          _best_depth_get    (int backend, void *connection, int screen);
 
 static void *eng_info(Evas *e);
 static void eng_info_free(Evas *e, void *info);
-static void eng_setup(Evas *e, void *info);
+static int eng_setup(Evas *e, void *info);
 static void eng_output_free(void *data);
 static void eng_output_resize(void *data, int w, int h);
 static void eng_output_tile_size_set(void *data, int w, int h);
@@ -65,7 +62,7 @@ static void eng_output_idle_flush(void *data);
 
 /* internal engine routines */
 
-#ifdef BUILD_ENGINE_SOFTWARE_X11
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
 static void *
 _output_xlib_setup(int      w,
                    int      h,
@@ -85,6 +82,8 @@ _output_xlib_setup(int      w,
    Render_Engine *re;
 
    re = calloc(1, sizeof(Render_Engine));
+   if (!re)
+     return NULL;
 
    evas_software_xlib_x_init();
    evas_software_xlib_x_color_init();
@@ -154,6 +153,8 @@ _output_xcb_setup(int               w,
    Render_Engine *re;
 
    re = calloc(1, sizeof(Render_Engine));
+   if (!re)
+     return NULL;
 
    evas_software_xcb_x_init();
    evas_software_xcb_x_color_init();
@@ -208,15 +209,15 @@ _best_visual_get(int backend, void *connection, int screen)
 {
    if (!connection) return NULL;
 
-#ifdef BUILD_ENGINE_SOFTWARE_X11
-   if (backend == 0)
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+   if (backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
      {
         return DefaultVisual((Display *)connection, screen);
      }
 #endif
 
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
-   if (backend == 1)
+   if (backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XCB)
      {
         xcb_screen_iterator_t iter_screen;
         xcb_depth_iterator_t  iter_depth;
@@ -253,15 +254,15 @@ _best_colormap_get(int backend, void *connection, int screen)
 {
    if (!connection) return 0;
 
-#ifdef BUILD_ENGINE_SOFTWARE_X11
-   if (backend == 0)
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+   if (backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
      {
         return DefaultColormap((Display *)connection, screen);
      }
 #endif
 
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
-   if (backend == 1)
+   if (backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XCB)
      {
         xcb_screen_iterator_t iter_screen;
         xcb_screen_t          *s;
@@ -286,15 +287,15 @@ _best_depth_get(int backend, void *connection, int screen)
 {
    if (!connection) return 0;
 
-#ifdef BUILD_ENGINE_SOFTWARE_X11
-   if (backend == 0)
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+   if (backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
      {
         return DefaultDepth((Display *)connection, screen);
      }
 #endif
 
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
-   if (backend == 1)
+   if (backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XCB)
      {
         xcb_screen_iterator_t iter_screen;
         xcb_screen_t          *s;
@@ -316,7 +317,7 @@ _best_depth_get(int backend, void *connection, int screen)
 
 /* engine api this module provides */
 static void *
-eng_info(Evas *e)
+eng_info(Evas *e __UNUSED__)
 {
    Evas_Engine_Info_Software_X11 *info;
 
@@ -330,11 +331,10 @@ eng_info(Evas *e)
    info->func.best_colormap_get = _best_colormap_get;
    info->func.best_depth_get = _best_depth_get;
    return info;
-   e = NULL;
 }
 
 static void
-eng_info_free(Evas *e, void *info)
+eng_info_free(Evas *e __UNUSED__, void *info)
 {
    Evas_Engine_Info_Software_X11 *in;
 
@@ -342,7 +342,7 @@ eng_info_free(Evas *e, void *info)
    free(in);
 }
 
-static void
+static int
 eng_setup(Evas *e, void *in)
 {
    Render_Engine                 *re;
@@ -365,7 +365,8 @@ eng_setup(Evas *e, void *in)
         evas_common_draw_init();
         evas_common_tilebuf_init();
 
-        if (info->info.backend == 0)
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+        if (info->info.backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
           {
 #ifdef BUILD_ENGINE_SOFTWARE_X11
              re = _output_xlib_setup(e->output.w,
@@ -391,12 +392,13 @@ eng_setup(Evas *e, void *in)
              re->outbuf_free_region_for_update = evas_software_xlib_outbuf_free_region_for_update;
              re->outbuf_flush = evas_software_xlib_outbuf_flush;
              re->outbuf_idle_flush = evas_software_xlib_outbuf_idle_flush;
-#endif
+	     re->outbuf_alpha_get = evas_software_xlib_outbuf_alpha_get;
           }
+#endif
 
-        if (info->info.backend == 1)
-          {
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
+        if (info->info.backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XCB)
+          {
              re = _output_xcb_setup(e->output.w,
                                     e->output.h,
                                     info->info.rotation,
@@ -421,8 +423,9 @@ eng_setup(Evas *e, void *in)
              re->outbuf_free_region_for_update = evas_software_xcb_outbuf_free_region_for_update;
              re->outbuf_flush = evas_software_xcb_outbuf_flush;
              re->outbuf_idle_flush = evas_software_xcb_outbuf_idle_flush;
-#endif             
+	     re->outbuf_alpha_get = evas_software_xcb_outbuf_alpha_get;
           }
+#endif
 
         e->engine.data.output = re;
      }
@@ -433,7 +436,8 @@ eng_setup(Evas *e, void *in)
 	re = e->engine.data.output;
 	ponebuf = re->ob->onebuf;
 
-        if (info->info.backend == 0)
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+        if (info->info.backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
           {
 #ifdef BUILD_ENGINE_SOFTWARE_X11
              evas_software_xlib_outbuf_free(re->ob);
@@ -454,10 +458,11 @@ eng_setup(Evas *e, void *in)
              evas_software_xlib_outbuf_debug_set(re->ob, info->info.debug);
 #endif
           }
+#endif
 
-        if (info->info.backend == 1)
-          {
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
+        if (info->info.backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XCB)
+          {
              evas_software_xcb_outbuf_free(re->ob);
              re->ob = evas_software_xcb_outbuf_setup_x(e->output.w,
                                                        e->output.h,
@@ -475,16 +480,18 @@ eng_setup(Evas *e, void *in)
                                                        info->info.shape_dither,
                                                        info->info.destination_alpha);
              evas_software_xcb_outbuf_debug_set(re->ob, info->info.debug);
-#endif             
           }
+#endif
 	re->ob->onebuf = ponebuf;
      }
-   if (!e->engine.data.output) return;
+   if (!e->engine.data.output) return 0;
    if (!e->engine.data.context)
      e->engine.data.context =
      e->engine.func->context_new(e->engine.data.output);
 
    re = e->engine.data.output;
+
+   return 1;
 }
 
 static void
@@ -596,8 +603,10 @@ eng_output_redraws_next_update_push(void *data, void *surface, int x, int y, int
    Render_Engine *re;
 
    re = (Render_Engine *)data;
+#ifdef BUILD_PIPE_RENDER
    evas_common_pipe_begin(surface);
    evas_common_pipe_flush(surface);
+#endif   
    re->outbuf_push_updated_region(re->ob, surface, x, y, w, h);
    re->outbuf_free_region_for_update(re->ob, surface);
    evas_common_cpu_end_opt();
@@ -621,9 +630,17 @@ eng_output_idle_flush(void *data)
    re->outbuf_idle_flush(re->ob);
 }
 
+static Eina_Bool
+eng_canvas_alpha_get(void *data, void *context)
+{
+   Render_Engine *re;
+
+   re = (Render_Engine *)data;
+   return (re->ob->priv.destination_alpha) || (re->outbuf_alpha_get(re->ob));
+}
 
 /* module advertising code */
-EAPI int
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -636,6 +653,7 @@ module_open(Evas_Module *em)
    ORD(info);
    ORD(info_free);
    ORD(setup);
+   ORD(canvas_alpha_get);
    ORD(output_free);
    ORD(output_resize);
    ORD(output_tile_size_set);
@@ -651,15 +669,25 @@ module_open(Evas_Module *em)
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
 }
 
-EAPI Evas_Module_Api evas_modapi = 
+static Evas_Module_Api evas_modapi =
 {
-   EVAS_MODULE_API_VERSION, 
-     EVAS_MODULE_TYPE_ENGINE,
-     "software_x11",
-     "none"
+   EVAS_MODULE_API_VERSION,
+   "software_x11",
+   "none",
+   {
+     module_open,
+     module_close
+   }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, software_x11);
+
+#ifndef EVAS_STATIC_BUILD_SOFTWARE_X11
+EVAS_EINA_MODULE_DEFINE(engine, software_x11);
+#endif
+

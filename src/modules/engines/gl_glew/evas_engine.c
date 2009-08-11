@@ -39,7 +39,7 @@ eng_info_free(Evas *e, void *info)
    free(in);
 }
 
-static void
+static int
 eng_setup(Evas *e, void *in)
 {
    Render_Engine            *re;
@@ -49,13 +49,13 @@ eng_setup(Evas *e, void *in)
    if (!e->engine.data.output)
      {
 	re = calloc(1, sizeof(Render_Engine));
-	if (!re) return;
+	if (!re) return 0;
 
         if (!evas_glew_init(info->info.window, &re->dc, &re->context))
           {
 	     free(re);
 	     e->engine.data.output = NULL;
-	     return;
+	     return 0;
           }
 
         re->win = info->info.window;
@@ -70,7 +70,7 @@ eng_setup(Evas *e, void *in)
 	  {
 	     free(re);
 	     e->engine.data.output = NULL;
-	     return;
+	     return 0;
 	  }
 
 	evas_common_cpu_init();
@@ -94,7 +94,7 @@ eng_setup(Evas *e, void *in)
           {
 	     free(re);
 	     e->engine.data.output = NULL;
-	     return;
+	     return 0;
           }
 
         re->win = info->info.window;
@@ -107,11 +107,13 @@ eng_setup(Evas *e, void *in)
                                     e->output.w,
                                     e->output.h);
      }
-   if (!e->engine.data.output) return;
+   if (!e->engine.data.output) return 0;
 
    if (!e->engine.data.context)
      e->engine.data.context =
        e->engine.func->context_new(e->engine.data.output);
+
+   return 1;
 }
 
 static void
@@ -288,7 +290,10 @@ eng_context_cutout_add(void *data, void *context, int x, int y, int w, int h)
    Render_Engine *re;
 
    re = (Render_Engine *)data;
-   /* not used in gl engine */
+#ifndef EVAS_GL_COMMON_NOCUTOUTS
+   re->window->gl_context->dc = context;
+   evas_common_draw_context_add_cutout(context, x, y, w, h);
+#endif
 }
 
 static void
@@ -297,7 +302,10 @@ eng_context_cutout_clear(void *data, void *context)
    Render_Engine *re;
 
    re = (Render_Engine *)data;
-   /* not used in gl engine */
+#ifndef EVAS_GL_COMMON_NOCUTOUTS
+   re->window->gl_context->dc = context;
+   evas_common_draw_context_clear_cutouts(context);
+#endif
 }
 
 static void
@@ -837,7 +845,7 @@ eng_image_data_put(void *data, void *image, DATA32 *image_data)
 }
 
 static void
-eng_image_data_preload_request(void *data, void *image, void *target)
+eng_image_data_preload_request(void *data, void *image, const void *target)
 {
    Evas_GL_Image *gim = image;
    RGBA_Image *im;
@@ -849,7 +857,7 @@ eng_image_data_preload_request(void *data, void *image, void *target)
 }
 
 static void
-eng_image_data_preload_cancel(void *data, void *image)
+eng_image_data_preload_cancel(void *data, void *image, const void *target)
 {
    Evas_GL_Image *gim = image;
    RGBA_Image *im;
@@ -857,7 +865,7 @@ eng_image_data_preload_cancel(void *data, void *image)
    if (!gim) return ;
    im = (RGBA_Image*) gim->im;
    if (!im) return ;
-   evas_cache_image_preload_cancel(&im->cache_entry);
+   evas_cache_image_preload_cancel(&im->cache_entry, target);
 }
 
 static void
@@ -873,6 +881,17 @@ eng_image_draw(void *data, void *context, void *surface, void *image, int src_x,
 			     src_x, src_y, src_w, src_h,
 			     dst_x, dst_y, dst_w, dst_h,
 			     smooth);
+}
+
+static void
+eng_image_scale_hint_set(void *data __UNUSED__, void *image, int hint)
+{
+}
+
+static int
+eng_image_scale_hint_get(void *data __UNUSED__, void *image)
+{
+   return EVAS_IMAGE_SCALE_HINT_NONE;
 }
 
 static void
@@ -903,8 +922,7 @@ eng_font_draw(void *data, void *context, void *surface, void *font, int x, int y
      }
 }
 
-
-EAPI int
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -976,21 +994,33 @@ module_open(Evas_Module *em)
    ORD(image_native_set);
    ORD(image_native_get);
    ORD(font_draw);
+   
+   ORD(image_scale_hint_set);
+   ORD(image_scale_hint_get);
+   
    /* now advertise out own api */
    em->functions = (void *)(&func);
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
-
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
    EVAS_MODULE_API_VERSION,
-   EVAS_MODULE_TYPE_ENGINE,
    "gl_glew",
-   "none"
+   "none",
+   {
+     module_open,
+     module_close
+   }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, gl_glew);
+
+#ifndef EVAS_STATIC_BUILD_GL_GLEW
+EVAS_EINA_MODULE_DEFINE(engine, gl_glew);
+#endif

@@ -3,24 +3,26 @@
 
 #ifdef BUILD_C
 static void
-_op_copy_p_c_dp(DATA32 *s, DATA8 *m, DATA32 c, DATA32 *d, int l) {
-   DATA32 *e = d + l;
-   while (d < e) {
-	*d = MUL4_SYM(c, *s);
-	d++;
-	s++;
-     }
+_op_copy_p_c_dp(DATA32 *s, DATA8 *m __UNUSED__, DATA32 c, DATA32 *d, int l) {
+   DATA32 *e;
+   UNROLL8_PLD_WHILE(d, l, e,
+                     {
+                        *d = MUL4_SYM(c, *s);
+                        d++;
+                        s++;
+                     });
 }
 
 static void
-_op_copy_p_caa_dp(DATA32 *s, DATA8 *m, DATA32 c, DATA32 *d, int l) {
-   DATA32 *e = d + l;
+_op_copy_p_caa_dp(DATA32 *s, DATA8 *m __UNUSED__, DATA32 c, DATA32 *d, int l) {
+   DATA32 *e;
    c = 1 + (c >> 24);
-   while (d < e) {
-	*d = MUL_256(c, *s);
-	d++;
-	s++;
-     }
+   UNROLL8_PLD_WHILE(d, l, e,
+                     {
+                        *d = MUL_256(c, *s);
+                        d++;
+                        s++;
+                     });
 }
 
 
@@ -69,13 +71,13 @@ init_copy_pixel_color_span_funcs_c(void)
 
 #ifdef BUILD_C
 static void
-_op_copy_pt_p_c_dp(DATA32 s, DATA8 m, DATA32 c, DATA32 *d) {
-	*d = MUL4_SYM(c, s);
+_op_copy_pt_p_c_dp(DATA32 s, DATA8 m __UNUSED__, DATA32 c, DATA32 *d) {
+   *d = MUL4_SYM(c, s);
 }
 
 static void
-_op_copy_pt_p_caa_dp(DATA32 s, DATA8 m, DATA32 c, DATA32 *d) {
-	*d = MUL_SYM(c >> 24, s);
+_op_copy_pt_p_caa_dp(DATA32 s, DATA8 m __UNUSED__, DATA32 c, DATA32 *d) {
+   *d = MUL_SYM(c >> 24, s);
 }
 
 
@@ -128,14 +130,15 @@ init_copy_pixel_color_pt_funcs_c(void)
 
 #ifdef BUILD_C
 static void
-_op_copy_rel_p_c_dp(DATA32 *s, DATA8 *m, DATA32 c, DATA32 *d, int l) {
-   DATA32 *e = d + l;
-   while (d < e) {
-	DATA32 cs = MUL4_SYM(c, *s);
-	*d = MUL_SYM(*d >> 24, cs);
-	d++;
-	s++;
-     }
+_op_copy_rel_p_c_dp(DATA32 *s, DATA8 *m __UNUSED__, DATA32 c, DATA32 *d, int l) {
+   DATA32 *e;
+   UNROLL8_PLD_WHILE(d, l, e,
+                     {
+                        DATA32 cs = MUL4_SYM(c, *s);
+                        *d = MUL_SYM(*d >> 24, cs);
+                        d++;
+                        s++;
+                     });
 }
 
 #define _op_copy_rel_pas_c_dp _op_copy_rel_p_c_dp
@@ -184,9 +187,9 @@ init_copy_rel_pixel_color_span_funcs_c(void)
 
 #ifdef BUILD_C
 static void
-_op_copy_rel_pt_p_c_dp(DATA32 s, DATA8 m, DATA32 c, DATA32 *d) {
-	s = MUL4_SYM(c, s);
-	*d = MUL_SYM(*d >> 24, s);
+_op_copy_rel_pt_p_c_dp(DATA32 s, DATA8 m __UNUSED__, DATA32 c, DATA32 *d) {
+   s = MUL4_SYM(c, s);
+   *d = MUL_SYM(*d >> 24, s);
 }
 
 #define _op_copy_rel_pt_pas_c_dp _op_copy_rel_pt_p_c_dp

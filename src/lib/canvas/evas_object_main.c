@@ -13,6 +13,18 @@
  */
 //#define FORWARD_NOOP_RESIZES_TO_SMART_OBJS
 
+/* Similar to FORWARD_NOOP_*, this will allow no-operations (those calls that
+ * have values exactly like current state) to call EVAS_CALLBACK_*.
+ *
+ * For some unknown reason this was the default behavior so it is left as
+ * a compile-time option, but will be deprecated and removed soon as it can
+ * potentially lead to execution of unnecessary code.
+ * by Gustavo, February 5th, 2009.
+ * XXX: remove-me before e17 release!
+ */
+//#define CALLBACK_NOOP
+
+
 static Eina_Inlist *
 get_layer_objects_last(Evas_Layer *l)
 {
@@ -50,14 +62,7 @@ evas_object_free(Evas_Object *obj, int clean_layer)
    if (!was_smart_child) evas_object_release(obj, clean_layer);
    if (obj->clip.clipees)
      eina_list_free(obj->clip.clipees);
-   while (obj->clip.changes)
-     {
-	Evas_Rectangle *r;
-
-	r = (Evas_Rectangle *)obj->clip.changes->data;
-	obj->clip.changes = eina_list_remove(obj->clip.changes, r);
-	free(r);
-     }
+   evas_object_clip_changes_clean(obj);
    evas_object_event_callback_all_del(obj);
    evas_object_event_callback_cleanup(obj);
    while (obj->data.elements)
@@ -89,7 +94,7 @@ evas_object_change(Evas_Object *obj)
 }
 
 void
-evas_object_render_pre_visible_change(Evas_Rectangles *rects, Evas_Object *obj, int is_v, int was_v)
+evas_object_render_pre_visible_change(Eina_Array *rects, Evas_Object *obj, int is_v, int was_v)
 {
    if (obj->smart.smart) return ;
    if (is_v == was_v) return ;
@@ -112,7 +117,7 @@ evas_object_render_pre_visible_change(Evas_Rectangles *rects, Evas_Object *obj, 
 }
 
 void
-evas_object_render_pre_clipper_change(Evas_Rectangles *rects, Evas_Object *obj)
+evas_object_render_pre_clipper_change(Eina_Array *rects, Evas_Object *obj)
 {
    if (obj->smart.smart) return ;
    if (obj->cur.clipper == obj->prev.clipper) return ;
@@ -164,7 +169,7 @@ evas_object_render_pre_clipper_change(Evas_Rectangles *rects, Evas_Object *obj)
 }
 
 void
-evas_object_render_pre_prev_cur_add(Evas_Rectangles *rects, Evas_Object *obj)
+evas_object_render_pre_prev_cur_add(Eina_Array *rects, Evas_Object *obj)
 {
    evas_add_rect(rects,
 		 obj->cur.geometry.x,
@@ -187,12 +192,23 @@ evas_object_render_pre_prev_cur_add(Evas_Rectangles *rects, Evas_Object *obj)
 }
 
 void
-evas_object_render_pre_effect_updates(Evas_Rectangles *rects, Evas_Object *obj, int is_v, int was_v)
+evas_object_clip_changes_clean(Evas_Object *obj)
 {
-   Evas_Rectangle *r;
+   Eina_Rectangle *r;
+
+   EINA_LIST_FREE(obj->clip.changes, r)
+     eina_rectangle_free(r);
+}
+
+
+void
+evas_object_render_pre_effect_updates(Eina_Array *rects, Evas_Object *obj, int is_v, int was_v)
+{
+   Eina_Rectangle *r;
    Evas_Object *clipper;
    Eina_List *l;
    unsigned int i;
+   Eina_Array_Iterator it;
    int x, y, w, h;
 
    if (obj->smart.smart) goto end;
@@ -200,13 +216,13 @@ evas_object_render_pre_effect_updates(Evas_Rectangles *rects, Evas_Object *obj, 
    was_v = 0;
    if (!obj->clip.clipees)
      {
-	for (i = 0; i < rects->count; ++i)
+	EINA_ARRAY_ITER_NEXT(rects, i, r, it)
 	  {
 	     /* get updates and clip to current clip */
-	     x = rects->array[i].x;
-	     y = rects->array[i].y;
-	     w = rects->array[i].w;
-	     h = rects->array[i].h;
+	     x = r->x;
+	     y = r->y;
+	     w = r->w;
+	     h = r->h;
 	     RECTS_CLIP_TO_RECT(x, y, w, h,
 				obj->cur.cache.clip.x,
 				obj->cur.cache.clip.y,
@@ -216,10 +232,10 @@ evas_object_render_pre_effect_updates(Evas_Rectangles *rects, Evas_Object *obj, 
 	       obj->layer->evas->engine.func->output_redraws_rect_add(obj->layer->evas->engine.data.output,
 								      x, y, w, h);
 	     /* get updates and clip to previous clip */
-	     x = rects->array[i].x;
-	     y = rects->array[i].y;
-	     w = rects->array[i].w;
-	     h = rects->array[i].h;
+	     x = r->x;
+	     y = r->y;
+	     w = r->w;
+	     h = r->h;
 	     RECTS_CLIP_TO_RECT(x, y, w, h,
 				obj->prev.cache.clip.x,
 				obj->prev.cache.clip.y,
@@ -264,26 +280,16 @@ evas_object_render_pre_effect_updates(Evas_Rectangles *rects, Evas_Object *obj, 
      }
    else
      {
-	while (obj->clip.changes)
-	  {
-	     free(obj->clip.changes->data);
-	     obj->clip.changes = eina_list_remove(obj->clip.changes, obj->clip.changes->data);
-	  }
-	for (i = 0; i < rects->count; ++i)
-	  {
-	     r = malloc(sizeof(Evas_Rectangle));
-	     if (!r) goto end;
-
-	     *r = rects->array[i];
-	     obj->clip.changes = eina_list_append(obj->clip.changes, r);
-	  }
+	evas_object_clip_changes_clean(obj);
+	EINA_ARRAY_ITER_NEXT(rects, i, r, it)
+	  obj->clip.changes = eina_list_append(obj->clip.changes, r);
+	eina_array_clean(rects);
      }
 
  end:
-   free(rects->array);
-   rects->array = NULL;
-   rects->count = 0;
-   rects->total = 0;
+   EINA_ARRAY_ITER_NEXT(rects, i, r, it)
+     eina_rectangle_free(r);
+   eina_array_clean(rects);
 }
 
 int
@@ -297,21 +303,6 @@ evas_object_was_in_output_rect(Evas_Object *obj, int x, int y, int w, int h)
 			obj->prev.cache.clip.w,
 			obj->prev.cache.clip.h)))
      return 1;
-   return 0;
-}
-
-int
-evas_object_was_visible(Evas_Object *obj)
-{
-   if (obj->smart.smart) return 0;
-   if ((obj->prev.visible) &&
-       (obj->prev.cache.clip.visible) &&
-       (obj->prev.cache.clip.a > 0))
-     {
-	if (obj->func->was_visible)
-	  return obj->func->was_visible(obj);
-	return 1;
-     }
    return 0;
 }
 
@@ -425,7 +416,9 @@ evas_object_move(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
    if ((obj->cur.geometry.x == x) &&
        (obj->cur.geometry.y == y))
      {
+#ifdef CALLBACK_NOOP
 	evas_object_inform_call_move(obj);
+#endif
 	return;
      }
 #ifndef FORWARD_NOOP_MOVES_TO_SMART_OBJS
@@ -498,7 +491,9 @@ evas_object_resize(Evas_Object *obj, Evas_Coord w, Evas_Coord h)
    if ((obj->cur.geometry.w == w) &&
        (obj->cur.geometry.h == h))
      {
+#ifdef CALLBACK_NOOP
 	evas_object_inform_call_resize(obj);
+#endif
 	return;
      }
 #ifndef FORWARD_NOOP_RESIZES_TO_SMART_OBJS
@@ -1036,7 +1031,9 @@ evas_object_show(Evas_Object *obj)
      }
    if (obj->cur.visible)
      {
+#ifdef CALLBACK_NOOP
 	evas_object_inform_call_show(obj);
+#endif
 	return;
      }
    obj->cur.visible = 1;
@@ -1083,7 +1080,9 @@ evas_object_hide(Evas_Object *obj)
      }
    if (!obj->cur.visible)
      {
+#ifdef CALLBACK_NOOP
 	evas_object_inform_call_hide(obj);
+#endif
 	return;
      }
    obj->cur.visible = 0;
@@ -1133,6 +1132,8 @@ evas_object_hide(Evas_Object *obj)
                        ev.data = NULL;
                        ev.modifiers = &(obj->layer->evas->modifiers);
                        ev.locks = &(obj->layer->evas->locks);
+		       ev.timestamp = obj->layer->evas->last_timestamp;
+		       ev.event_flags = EVAS_EVENT_FLAG_NONE;
                        evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_OUT, &ev);
 		    }
 	       }
@@ -1154,7 +1155,7 @@ evas_object_hide(Evas_Object *obj)
  * @return  @c 1 if the object is visible.  @c 0 otherwise.
  * @ingroup Evas_Object_Group
  */
-EAPI Evas_Bool
+EAPI Eina_Bool
 evas_object_visible_get(const Evas_Object *obj)
 {
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
@@ -1197,6 +1198,7 @@ evas_object_color_set(Evas_Object *obj, int r, int g, int b, int a)
    obj->cur.color.r = r;
    obj->cur.color.g = g;
    obj->cur.color.b = b;
+   evas_object_clip_dirty(obj);
    if ((obj->cur.color.a == 0) && (a == 0)) return;
    obj->cur.color.a = a;
    evas_object_change(obj);
@@ -1244,7 +1246,7 @@ evas_object_color_get(const Evas_Object *obj, int *r, int *g, int *b, int *a)
  * @ingroup Evas_Object_Group
  */
 EAPI void
-evas_object_anti_alias_set(Evas_Object *obj, Evas_Bool anti_alias)
+evas_object_anti_alias_set(Evas_Object *obj, Eina_Bool anti_alias)
 {
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
    return;
@@ -1263,7 +1265,7 @@ evas_object_anti_alias_set(Evas_Object *obj, Evas_Bool anti_alias)
  * @return  @c 1 if the object is to be anti_aliased.  @c 0 otherwise.
  * @ingroup Evas_Object_Group
  */
-EAPI Evas_Bool
+EAPI Eina_Bool
 evas_object_anti_alias_get(const Evas_Object *obj)
 {
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
@@ -1409,7 +1411,7 @@ evas_object_evas_get(const Evas_Object *obj)
  * FIXME: To be fixed.
  */
 EAPI Evas_Object *
-evas_object_top_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Bool include_pass_events_objects, Evas_Bool include_hidden_objects)
+evas_object_top_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
 {
    Evas_Layer *lay;
    int xx, yy;
@@ -1457,7 +1459,7 @@ evas_object_top_at_pointer_get(const Evas *e)
  * FIXME: To be fixed.
  */
 EAPI Evas_Object *
-evas_object_top_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, Evas_Bool include_pass_events_objects, Evas_Bool include_hidden_objects)
+evas_object_top_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
 {
    Evas_Layer *lay;
    int xx, yy, ww, hh;
@@ -1499,7 +1501,7 @@ evas_object_top_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas
  * FIXME: To be fixed.
  */
 EAPI Eina_List *
-evas_objects_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Bool include_pass_events_objects, Evas_Bool include_hidden_objects)
+evas_objects_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
 {
    Eina_List *in = NULL;
    Evas_Layer *lay;
@@ -1536,7 +1538,7 @@ evas_objects_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Bool incl
  * FIXME: To be fixed.
  */
 EAPI Eina_List *
-evas_objects_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, Evas_Bool include_pass_events_objects, Evas_Bool include_hidden_objects)
+evas_objects_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
 {
    Eina_List *in = NULL;
    Evas_Layer *lay;
@@ -1595,7 +1597,7 @@ evas_object_type_get(const Evas_Object *obj)
  * The default value is false.
  */
 EAPI void
-evas_object_precise_is_inside_set(Evas_Object *obj, Evas_Bool precise)
+evas_object_precise_is_inside_set(Evas_Object *obj, Eina_Bool precise)
 {
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
    return;
@@ -1607,7 +1609,7 @@ evas_object_precise_is_inside_set(Evas_Object *obj, Evas_Bool precise)
  * Determine whether an object is set to use a precise point collision detection.
  * @param obj The given object.
  */
-EAPI Evas_Bool
+EAPI Eina_Bool
 evas_object_precise_is_inside_get(const Evas_Object *obj)
 {
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);

@@ -4,15 +4,14 @@
 
 #include "evas_common.h"
 #include "evas_private.h"
-
-extern Eina_List *evas_modules;
+#include "evas_cs.h"
 
 struct ext_loader_s {
    const char*	extention;
    const char*	loader;
 };
 
-static struct ext_loader_s	loaders[] = {
+static struct ext_loader_s	const loaders[] = {
    { "png", "png" },
    { "jpg", "jpeg" },
    { "jpeg", "jpeg" },
@@ -33,16 +32,48 @@ static struct ext_loader_s	loaders[] = {
    { "pnm", "pmaps" }
 };
 
-int
+static const char *loaders_name[] = {
+  "png", "jpeg", "eet", "xpm", "tiff", "gif", "svg", "pmaps", "edb"
+};
+
+static Eina_Bool
+_evas_image_foreach_loader(const Eina_Hash *hash, const char *key, Evas_Module *em, Image_Entry *ie)
+{
+   Evas_Image_Load_Func *evas_image_load_func = NULL;
+
+   if (!evas_module_load(em)) return EINA_TRUE;
+   evas_image_load_func = em->functions;
+   evas_module_use(em);
+   if (evas_image_load_func && evas_image_load_func->file_head(ie, ie->file, ie->key))
+     {
+	ie->info.module = (void*) em;
+	ie->info.loader = (void*) evas_image_load_func;
+	evas_module_ref((Evas_Module*) ie->info.module);
+	return EINA_FALSE;
+     }
+
+   return EINA_TRUE;
+}
+
+EAPI int
 evas_common_load_rgba_image_module_from_file(Image_Entry *ie)
 {
    Evas_Image_Load_Func *evas_image_load_func = NULL;
    const char           *loader = NULL;
-   Eina_List            *l;
    Evas_Module          *em;
    char                 *dot;
    int                   i;
 
+
+#ifdef EVAS_CSERVE
+   if (evas_cserve_use_get())
+     {
+        if (evas_cserve_image_load(ie, ie->file, ie->key, &(ie->load_opts)))
+          {
+             return 0;
+          }
+     }
+#endif   
    dot = strrchr (ie->file, '.');
    if (dot)
      {
@@ -67,50 +98,77 @@ evas_common_load_rgba_image_module_from_file(Image_Entry *ie)
 		  evas_image_load_func = em->functions;
 		  if (evas_image_load_func->file_head(ie, ie->file, ie->key))
 		    goto ok;
+		  evas_module_unload(em);
 	       }
 	  }
      }
 
-   EINA_LIST_FOREACH(evas_modules, l, em)
+   evas_module_foreach_image_loader(_evas_image_foreach_loader, ie);
+   if (ie->info.module) return 0;
+
+   /* This is our last chance, try all known image loader. */
+   /* FIXME: We could use eina recursive module search ability. */
+   for (i = 0; i < sizeof (loaders_name) / sizeof (char *); ++i)
      {
-	if (em->type != EVAS_MODULE_TYPE_IMAGE_LOADER) continue;
-	if (!evas_module_load(em)) continue;
-        evas_image_load_func = em->functions;
-	evas_module_use(em);
-	if (evas_image_load_func->file_head(ie, ie->file, ie->key))
+	em = evas_module_find_type(EVAS_MODULE_TYPE_IMAGE_LOADER, loaders_name[i]);
+	if (em)
 	  {
-	     if (evas_modules != l)
+	     if (evas_module_load(em))
 	       {
-		  evas_modules = eina_list_promote_list(evas_modules, l);
+		  evas_module_use(em);
+		  evas_image_load_func = em->functions;
+		  if (evas_image_load_func->file_head(ie, ie->file, ie->key))
+		    goto ok;
+		  evas_module_unload(em);
 	       }
-	     goto ok;
 	  }
      }
 
    return -1;
 
-  ok:
+   ok:
    ie->info.module = (void*) em;
    ie->info.loader = (void*) evas_image_load_func;
    evas_module_ref((Evas_Module*) ie->info.module);
    return 0;
 }
 
-int
+EAPI int
 evas_common_load_rgba_image_data_from_file(Image_Entry *ie)
 {
    Evas_Image_Load_Func *evas_image_load_func = NULL;
 
-   if (!ie->info.module) return -1;
    if (ie->flags.loaded) return -1;
+
+#ifdef EVAS_CSERVE
+   if (ie->data1)
+     {
+        if (evas_cserve_image_data_load(ie))
+          {
+             RGBA_Image *im = (RGBA_Image *)ie;
+             Mem *mem;
+             
+             mem = ie->data2;
+             if (mem)
+               {
+                  im->image.data = mem->data + mem->offset;
+                  im->image.no_free = 1;
+                  return 0;
+               }
+          }
+        return -1;
+     }
+#endif
+   
+   if (!ie->info.module) return -1;
 
    evas_image_load_func = ie->info.loader;
    evas_module_use((Evas_Module*) ie->info.module);
    if (!evas_image_load_func->file_data(ie, ie->file, ie->key))
      return -1;
 
-   evas_module_unref((Evas_Module*) ie->info.module);
-   ie->info.module = NULL;
+//   evas_module_unref((Evas_Module*) ie->info.module);
+//   ie->info.module = NULL;
 
    return 0;
 }

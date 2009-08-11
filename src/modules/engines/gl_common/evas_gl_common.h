@@ -1,6 +1,8 @@
 #ifndef EVAS_GL_COMMON_H
 #define EVAS_GL_COMMON_H
 
+#define EVAS_GL_COMMON_NOCUTOUTS 1
+
 /* FIXME: need to handle memory errors */
 /* FIXME: need to handle list errors */
 /* FIXME: need to handle gl errors */
@@ -21,15 +23,17 @@
 #include <unistd.h>
 
 #ifdef BUILD_ENGINE_GL_GLEW
-#include <GL/glew.h>
+# include <GL/glew.h>
+#else
+# define GL_GLEXT_PROTOTYPES
 #endif /* BUILD_ENGINE_GL_GLEW */
 
 #ifdef BUILD_ENGINE_GL_QUARTZ
-#include <OpenGL/gl.h>
-#include <OpenGL/glu.h>
+# include <OpenGL/gl.h>
+# include <OpenGL/glu.h>
 #else
-#include <GL/gl.h>
-#include <GL/glu.h>
+# include <GL/gl.h>
+# include <GL/glu.h>
 #endif /* BUILD_ENGINE_GL_QUARTZ */
 
 typedef struct _Evas_GL_Context                      Evas_GL_Context;
@@ -139,7 +143,7 @@ struct _Evas_GL_Polygon
 {
    Eina_List *points;
    GLuint     dl;
-   Evas_Bool  changed : 1;
+   Eina_Bool  changed : 1;
 };
 
 struct _Evas_GL_Polygon_Point

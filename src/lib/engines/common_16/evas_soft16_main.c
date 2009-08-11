@@ -25,11 +25,11 @@ static int               _evas_common_soft16_image_colorspace_set(Image_Entry* i
 
 static int               _evas_common_load_soft16_image_data_from_file(Image_Entry *ie);
 
-static void
-_evas_common_soft16_image_debug(const char* context, Image_Entry *eim)
-{
-   fprintf(stderr, "[16] %p = [%s] {%s,%s} %i [%i|%i]\n", eim, context, eim->file, eim->key, eim->references, eim->w, eim->h);
-}
+/* static void */
+/* _evas_common_soft16_image_debug(const char* context, Image_Entry *eim) */
+/* { */
+/*    fprintf(stderr, "[16] %p = [%s] {%s,%s} %i [%i|%i]\n", eim, context, eim->file, eim->key, eim->references, eim->w, eim->h); */
+/* } */
 
 static const Evas_Cache_Image_Func      _evas_common_soft16_image_func =
 {
@@ -78,8 +78,10 @@ evas_common_soft16_image_shutdown(void)
 // evas_common_image_init() at the start and evas_common_image_shutdown()
 // after it all. really ref 0 should only be reached when no more canvases
 // with no more objects exist anywhere.
-//        evas_cache_image_shutdown(eci);
-//        eci = NULL;
+
+// ENABLE IT AGAIN, hope it is fixed. Gustavo @ January 22nd, 2009.
+        evas_cache_image_shutdown(eci);
+        eci = NULL;
      }
 }
 
@@ -146,7 +148,7 @@ _evas_common_soft16_image_surface_delete(Image_Entry *ie)
 }
 
 static DATA32 *
-_evas_common_soft16_image_surface_pixels(Image_Entry *ie)
+_evas_common_soft16_image_surface_pixels(Image_Entry *ie __UNUSED__)
 {
    abort();
 
@@ -173,12 +175,12 @@ _evas_common_load_soft16_image_from_file(Image_Entry *ie)
 }
 
 static void
-_evas_common_soft16_image_unload(Image_Entry *ie)
+_evas_common_soft16_image_unload(Image_Entry *ie __UNUSED__)
 {
 }
 
 static void
-_evas_common_soft16_image_dirty_region(Image_Entry *im, int x, int y, int w, int h)
+_evas_common_soft16_image_dirty_region(Image_Entry *im __UNUSED__, int x __UNUSED__, int y __UNUSED__, int w __UNUSED__, int h __UNUSED__)
 {
 }
 
@@ -208,7 +210,7 @@ _evas_common_soft16_image_ram_usage(Image_Entry *ie)
 }
 
 static int
-_evas_common_soft16_image_size_set(Image_Entry *ie_dst, const Image_Entry *ie_im, int w, int h)
+_evas_common_soft16_image_size_set(Image_Entry *ie_dst, const Image_Entry *ie_im, int w __UNUSED__, int h __UNUSED__)
 {
    Soft16_Image *dst = (Soft16_Image *) ie_dst;
    Soft16_Image *im = (Soft16_Image *) ie_im;
@@ -219,7 +221,7 @@ _evas_common_soft16_image_size_set(Image_Entry *ie_dst, const Image_Entry *ie_im
 }
 
 static int
-_evas_common_soft16_image_from_data(Image_Entry* ie_dst, int w, int h, DATA32 *image_data, int alpha, int cspace)
+_evas_common_soft16_image_from_data(Image_Entry* ie_dst, int w, int h, DATA32 *image_data, int alpha, int cspace __UNUSED__)
 {
    Soft16_Image *im = (Soft16_Image *) ie_dst;
 
@@ -230,6 +232,8 @@ _evas_common_soft16_image_from_data(Image_Entry* ie_dst, int w, int h, DATA32 *i
 
    im->flags.free_pixels = 0;
    im->flags.free_alpha = 0;
+   if (im->stride < 0)
+        im->stride = _calc_stride(w);
 
    /* FIXME: That's bad, the application must be aware of the engine internal. */
    im->pixels = (DATA16 *) image_data;
@@ -240,7 +244,7 @@ _evas_common_soft16_image_from_data(Image_Entry* ie_dst, int w, int h, DATA32 *i
 }
 
 static int
-_evas_common_soft16_image_from_copied_data(Image_Entry* ie_dst, int w, int h, DATA32 *image_data, int alpha, int cspace)
+_evas_common_soft16_image_from_copied_data(Image_Entry* ie_dst, int w __UNUSED__, int h, DATA32 *image_data, int alpha __UNUSED__, int cspace __UNUSED__)
 {
    Soft16_Image *im = (Soft16_Image *) ie_dst;
 
@@ -254,7 +258,7 @@ _evas_common_soft16_image_from_copied_data(Image_Entry* ie_dst, int w, int h, DA
 }
 
 static int
-_evas_common_soft16_image_colorspace_set(Image_Entry* ie_dst, int cspace)
+_evas_common_soft16_image_colorspace_set(Image_Entry* ie_dst __UNUSED__, int cspace __UNUSED__)
 {
    /* FIXME: handle colorspace */
    return 0;
@@ -315,14 +319,11 @@ _evas_common_load_soft16_image_data_from_file(Image_Entry *ie)
 
 static inline void
 _get_clip(const RGBA_Draw_Context *dc, const Soft16_Image *im,
-	  Evas_Rectangle *clip)
+	  Eina_Rectangle *clip)
 {
    if (dc->clip.use)
      {
-	clip->x = dc->clip.x;
-	clip->y = dc->clip.y;
-	clip->w = dc->clip.w;
-	clip->h = dc->clip.h;
+	EINA_RECTANGLE_SET(clip, dc->clip.x, dc->clip.y, dc->clip.w, dc->clip.h);
 	if (clip->x < 0)
 	  {
 	     clip->w += clip->x;
@@ -338,15 +339,12 @@ _get_clip(const RGBA_Draw_Context *dc, const Soft16_Image *im,
      }
    else
      {
-	clip->x = 0;
-	clip->y = 0;
-	clip->w = im->cache_entry.w;
-	clip->h = im->cache_entry.h;
+	EINA_RECTANGLE_SET(clip, 0, 0, im->cache_entry.w, im->cache_entry.h);
      }
 }
 
 static inline int
-_is_empty_rectangle(const Evas_Rectangle *r)
+_is_empty_rectangle(const Eina_Rectangle *r)
 {
    return (r->w < 1) || (r->h < 1);
 }
@@ -369,11 +367,11 @@ _shrink(int *s_pos, int *s_size, int pos, int size)
 }
 
 static int
-_soft16_adjust_areas(Evas_Rectangle *src,
+_soft16_adjust_areas(Eina_Rectangle *src,
 		     int src_max_x, int src_max_y,
-		     Evas_Rectangle *dst,
+		     Eina_Rectangle *dst,
 		     int dst_max_x, int dst_max_y,
-		     Evas_Rectangle *dst_clip)
+		     Eina_Rectangle *dst_clip)
 {
    if (_is_empty_rectangle(src) ||
        _is_empty_rectangle(dst) ||
@@ -445,9 +443,9 @@ _soft16_adjust_areas(Evas_Rectangle *src,
 static void
 _soft16_image_draw_sampled_int(Soft16_Image *src, Soft16_Image *dst,
 			       RGBA_Draw_Context *dc,
-			       Evas_Rectangle sr, Evas_Rectangle dr)
+			       Eina_Rectangle sr, Eina_Rectangle dr)
 {
-   Evas_Rectangle cr;
+   Eina_Rectangle cr;
 
    if (!(RECTS_INTERSECT(dr.x, dr.y, dr.w, dr.h, 0, 0, dst->cache_entry.w, dst->cache_entry.h)))
      return;
@@ -471,28 +469,22 @@ soft16_image_draw(Soft16_Image *src, Soft16_Image *dst,
 		  int src_region_w, int src_region_h,
 		  int dst_region_x, int dst_region_y,
 		  int dst_region_w, int dst_region_h,
-		  int smooth)
+		  int smooth __UNUSED__)
 {
-   Evas_Rectangle sr, dr;
+   Eina_Rectangle sr, dr;
    Cutout_Rects *rects;
    Cutout_Rect  *r;
    struct RGBA_Draw_Context_clip clip_bkp;
    int i;
 
    /* handle cutouts here! */
-   dr.x = dst_region_x;
-   dr.y = dst_region_y;
-   dr.w = dst_region_w;
-   dr.h = dst_region_h;
+   EINA_RECTANGLE_SET(&dr, dst_region_x, dst_region_y, dst_region_w, dst_region_h);
 
    if (_is_empty_rectangle(&dr)) return;
    if (!(RECTS_INTERSECT(dr.x, dr.y, dr.w, dr.h, 0, 0, dst->cache_entry.w, dst->cache_entry.h)))
      return;
 
-   sr.x = src_region_x;
-   sr.y = src_region_y;
-   sr.w = src_region_w;
-   sr.h = src_region_h;
+   EINA_RECTANGLE_SET(&sr, src_region_x, src_region_y, src_region_w, src_region_h);
 
    if (_is_empty_rectangle(&sr)) return;
    if (!(RECTS_INTERSECT(sr.x, sr.y, sr.w, sr.h, 0, 0, src->cache_entry.w, src->cache_entry.h)))

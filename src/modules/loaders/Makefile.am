@@ -1,40 +1,58 @@
 MAINTAINERCLEANFILES = Makefile.in
 
+SUBDIRS =
+
 if BUILD_LOADER_EDB
-edb_subdir = edb
+if !EVAS_STATIC_BUILD_EDB
+SUBDIRS += edb
+endif
 endif
 
 if BUILD_LOADER_EET
-eet_subdir = eet
+if !EVAS_STATIC_BUILD_EET
+SUBDIRS += eet
+endif
 endif
 
 if BUILD_LOADER_GIF
-gif_subdir = gif
+if !EVAS_STATIC_BUILD_GIF
+SUBDIRS += gif
+endif
 endif
 
 if BUILD_LOADER_JPEG
-jpeg_subdir = jpeg
+if !EVAS_STATIC_BUILD_JPEG
+SUBDIRS += jpeg
+endif
 endif
 
 if BUILD_LOADER_PMAPS
-pmaps_subdir = pmaps
+if !EVAS_STATIC_BUILD_PMAPS
+SUBDIRS += pmaps
+endif
 endif
 
 if BUILD_LOADER_PNG
-png_subdir = png
+if !EVAS_STATIC_BUILD_PNG
+SUBDIRS += png
+endif
 endif
 
 if BUILD_LOADER_SVG
-svg_subdir = svg
+if !EVAS_STATIC_BUILD_SVG
+SUBDIRS += svg
+endif
 endif
 
 if BUILD_LOADER_TIFF
-tiff_subdir = tiff
+if !EVAS_STATIC_BUILD_TIFF
+SUBDIRS += tiff
+endif
 endif
 
 if BUILD_LOADER_XPM
-xpm_subdir = xpm
+if !EVAS_STATIC_BUILD_XPM
+SUBDIRS += xpm
+endif
 endif
 
-
-SUBDIRS = $(edb_subdir) $(eet_subdir) $(gif_subdir) $(jpeg_subdir) $(pmaps_subdir) $(png_subdir) $(svg_subdir) $(tiff_subdir) $(xpm_subdir)

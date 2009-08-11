@@ -12,8 +12,8 @@ struct _Evas_Object_Smart
    Eina_List        *callbacks;
    Eina_Inlist *contained;
    int               walking_list;
-   Evas_Bool         deletions_waiting : 1;
-   Evas_Bool         need_recalculate : 1;
+   Eina_Bool         deletions_waiting : 1;
+   Eina_Bool         need_recalculate : 1;
 };
 
 struct _Evas_Smart_Callback
@@ -48,6 +48,8 @@ static const Evas_Object_Func object_func =
      evas_object_smart_visual_id_get,
      evas_object_smart_engine_data_get,
      /* these are optional. NULL = nothing */
+     NULL,
+     NULL,
      NULL,
      NULL,
      NULL,
@@ -182,10 +184,18 @@ evas_object_smart_member_add(Evas_Object *obj, Evas_Object *smart_obj)
 	abort();
 	return;
      }
+   if (obj->layer && smart_obj->layer
+       && obj->layer->evas != smart_obj->layer->evas)
+     {
+	printf("EVAS ERROR: Adding object %p from Evas (%p) from another Evas (%p)\n", obj, obj->layer->evas, smart_obj->layer->evas);
+	abort();
+	return;
+     }
+
    if (obj->smart.parent == smart_obj) return;
    
    if (obj->smart.parent) evas_object_smart_member_del(obj);
-   
+
    evas_object_release(obj, 1);
    obj->layer = smart_obj->layer;
    obj->cur.layer = obj->layer->layer;
@@ -461,7 +471,7 @@ evas_object_smart_callback_call(Evas_Object *obj, const char *event, void *event
  * @ingroup Evas_Smart_Object_Group
  */
 EAPI void
-evas_object_smart_need_recalculate_set(Evas_Object *obj, Evas_Bool value)
+evas_object_smart_need_recalculate_set(Evas_Object *obj, Eina_Bool value)
 {
    Evas_Object_Smart *o;
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
@@ -506,7 +516,7 @@ evas_object_smart_need_recalculate_set(Evas_Object *obj, Evas_Bool value)
  *
  * @ingroup Evas_Smart_Object_Group
  */
-EAPI Evas_Bool
+EAPI Eina_Bool
 evas_object_smart_need_recalculate_get(const Evas_Object *obj)
 {
    Evas_Object_Smart *o;
@@ -775,11 +785,9 @@ evas_object_smart_free(Evas_Object *obj)
 }
 
 static void
-evas_object_smart_render(Evas_Object *obj, void *output, void *context, void *surface, int x, int y)
+evas_object_smart_render(Evas_Object *obj __UNUSED__, void *output __UNUSED__, void *context __UNUSED__, void *surface __UNUSED__, int x __UNUSED__, int y __UNUSED__)
 {
    return;
-   obj = output = context = surface = NULL;
-   x = y = 0;
 }
 
 static void

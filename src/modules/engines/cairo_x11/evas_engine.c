@@ -10,7 +10,7 @@
 
 static void *eng_info(Evas *e);
 static void eng_info_free(Evas *e, void *info);
-static void eng_setup(Evas *e, void *info);
+static int eng_setup(Evas *e, void *info);
 static void *eng_output_setup(int w, int h, Display *disp, Drawable draw, Visual *vis, Colormap cmap, int depth);
 static void eng_output_free(void *data);
 static void eng_output_resize(void *data, int w, int h);
@@ -23,6 +23,7 @@ static void eng_output_redraws_next_update_push(void *data, void *surface, int x
 static void eng_output_flush(void *data);
 
 static void *eng_context_new(void *data);
+static Eina_Bool eng_canvas_alpha_get(void *data, void *context);
 static void eng_context_free(void *data, void *context);
 static void eng_context_clip_set(void *data, void *context, int x, int y, int w, int h);
 static void eng_context_clip_clip(void *data, void *context, int x, int y, int w, int h);
@@ -79,8 +80,8 @@ static void *eng_image_size_set(void *data, void *image, int w, int h);
 static void *eng_image_dirty_region(void *data, void *image, int x, int y, int w, int h);
 static void *eng_image_data_get(void *data, void *image, int to_write, DATA32 **image_data);
 static void *eng_image_data_put(void *data, void *image, DATA32 *image_data);
-static void eng_image_data_preload_request(void *data, void *image, void *target);
-static void eng_image_data_preload_cancel(void *data, void *image);
+static void eng_image_data_preload_request(void *data, void *image, const void *target);
+static void eng_image_data_preload_cancel(void *data, void *image, const void *target);
 static void *eng_image_alpha_set(void *data, void *image, int has_alpha);
 static int eng_image_alpha_get(void *data, void *image);
 static void *eng_image_border_set(void *data, void *image, int l, int r, int t, int b);
@@ -95,7 +96,9 @@ static void *eng_image_native_get(void *data, void *image);
 static void eng_image_cache_flush(void *data);
 static void eng_image_cache_set(void *data, int bytes);
 static int eng_image_cache_get(void *data);
-
+static void eng_image_scale_hint_set(void *data __UNUSED__, void *image, int hint);
+static int eng_image_scale_hint_get(void *data __UNUSED__, void *image);
+    
 static void *eng_font_load(void *data, char *name, int size);
 static void *eng_font_memory_load(void *data, char *name, int size, const void *fdata, int fdata_size);
 static void *eng_font_add(void *data, void *font, char *name, int size);
@@ -142,6 +145,7 @@ static Evas_Func eng_func =
      eng_output_flush,
      /* draw context virtual methods */
      eng_context_new,
+     eng_canvas_alpha_get,
      eng_context_free,
      eng_context_clip_set,
      eng_context_clip_clip,
@@ -239,7 +243,10 @@ static Evas_Func eng_func =
      eng_font_cache_get,
                               
      eng_font_hinting_set,
-     eng_font_hinting_can_hint
+     eng_font_hinting_can_hint,
+     
+     eng_image_scale_hint_set,
+     eng_image_scale_hint_get
 };
 
 static void *
@@ -264,7 +271,7 @@ eng_info_free(Evas *e, void *info)
    free(in);
 }
 
-static void
+static int
 eng_setup(Evas *e, void *in)
 {
    Render_Engine *re;
@@ -281,12 +288,14 @@ eng_setup(Evas *e, void *in)
 					info->info.visual,
 					info->info.colormap,
 					info->info.depth);
-   if (!e->engine.data.output) return;
+   if (!e->engine.data.output) return 0;
 
    if (!e->engine.data.context)
      e->engine.data.context =
      e->engine.func->context_new(e->engine.data.output);
    re = e->engine.data.output;
+
+   return 1;
 }
 
 static void *
@@ -295,6 +304,8 @@ eng_output_setup(int w, int h, Display *disp, Drawable draw, Visual *vis, Colorm
    Render_Engine *re;
 
    re = calloc(1, sizeof(Render_Engine));
+   if (!re)
+     return NULL;
    re->win = eng_window_new(disp, draw,
 					      0 /* FIXME: screen 0 assumption */,
 					      vis, cmap, depth, w, h);
@@ -1047,7 +1058,7 @@ eng_image_data_put(void *data, void *image, DATA32 *image_data)
 }
 
 static void
-eng_image_data_preload_request(void *data, void *image, void *target)
+eng_image_data_preload_request(void *data, void *image, const void *target)
 {
    Render_Engine *re;
 
@@ -1057,7 +1068,7 @@ eng_image_data_preload_request(void *data, void *image, void *target)
 }
 
 static void
-eng_image_data_preload_cancel(void *data, void *image)
+eng_image_data_preload_cancel(void *data, void *image, const void *target)
 {
    Render_Engine *re;
 
@@ -1251,6 +1262,17 @@ eng_image_cache_get(void *data)
 
    re = (Render_Engine *)data;
    return evas_common_image_get_cache();
+}
+
+static void
+eng_image_scale_hint_set(void *data __UNUSED__, void *image, int hint)
+{
+}
+
+static int
+eng_image_scale_hint_get(void *data __UNUSED__, void *image)
+{
+   return EVAS_IMAGE_SCALE_HINT_NONE;
 }
 
 static void *
@@ -1458,7 +1480,13 @@ eng_font_hinting_can_hint(void *data, int hinting)
    re = (Render_Engine *)data;
 }
 
-EAPI int
+static Eina_Bool
+eng_canvas_alpha_get(void *data, void *context)
+{
+   return EINA_FALSE;
+}
+
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -1466,16 +1494,24 @@ module_open(Evas_Module *em)
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
-   
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
    EVAS_MODULE_API_VERSION,
-     EVAS_MODULE_TYPE_ENGINE,
-     "cairo_x11",
-     "none"
+   "cairo_x11",
+   "none",
+   {
+     module_open,
+     module_close
+   }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, cairo_x11);
+
+#ifndef EVAS_STATIC_BUILD_CAIRO_X11
+EVAS_EINA_MODULE_DEFINE(engine, cairo_x11);
+#endif

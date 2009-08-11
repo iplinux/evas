@@ -2,8 +2,16 @@
  * vim:ts=8:sw=3:sts=8:noexpandtab:cino=>5n-3f0^-2{2
  */
 
+/* Internationalization (RTL and Arabic contextualizing)
+ * was added by Tom Hacohen (tom@stosb.com)
+ */
+
+
 #include "evas_common.h"
 #include "evas_blend_private.h"
+
+#include "evas_intl_utils.h" /*defines INTERNATIONAL_SUPPORT if possible */
+
 
 EAPI RGBA_Font_Glyph *
 evas_common_font_int_cache_glyph_get(RGBA_Font_Int *fi, FT_UInt index)
@@ -45,9 +53,50 @@ evas_common_font_int_cache_glyph_get(RGBA_Font_Int *fi, FT_UInt index)
 	  }
      }
    fg->glyph_out = (FT_BitmapGlyph)fg->glyph;
+   fg->index = hindex;
 
-   eina_hash_add(fi->glyphs, &hindex, fg);
+   eina_hash_direct_add(fi->glyphs, &fg->index, fg);
    return fg;
+}
+
+typedef struct _Font_Char_Index Font_Char_Index;
+struct _Font_Char_Index
+{
+   FT_UInt index;
+   int gl;
+};
+
+static FT_UInt
+_evas_common_get_char_index(RGBA_Font_Int* fi, int gl)
+{
+   Font_Char_Index *result;
+
+#ifdef HAVE_PTHREAD
+   pthread_mutex_lock(&fi->ft_mutex);
+#endif
+
+   result = eina_hash_find(fi->indexes, &gl);
+   if (result) goto on_correct;
+
+   result = malloc(sizeof (Font_Char_Index));
+   if (!result)
+     {
+#ifdef HAVE_PTHREAD
+	pthread_mutex_unlock(&fi->ft_mutex);
+#endif
+	return FT_Get_Char_Index(fi->src->ft.face, gl);
+     }
+
+   result->index = FT_Get_Char_Index(fi->src->ft.face, gl);
+   result->gl = gl;
+
+   eina_hash_direct_add(fi->indexes, &result->gl, result);
+
+ on_correct:
+#ifdef HAVE_PTHREAD
+   pthread_mutex_unlock(&fi->ft_mutex);
+#endif
+   return result->index;
 }
 
 EAPI int
@@ -62,6 +111,7 @@ evas_common_font_glyph_search(RGBA_Font *fn, RGBA_Font_Int **fi_ret, int gl)
 
 	fi = l->data;
 
+#if 0 /* FIXME: charmap user is disabled and use a deprecated data type. */
 	if (fi->src->charmap) /* Charmap loaded, FI/FS blank */
 	  {
 	     index = evas_array_hash_search(fi->src->charmap, gl);
@@ -77,7 +127,9 @@ evas_common_font_glyph_search(RGBA_Font *fn, RGBA_Font_Int **fi_ret, int gl)
 		  return index;
 	       }
 	  }
-	else if (!fi->src->ft.face) /* Charmap not loaded, FI/FS blank */
+	else
+#endif
+	  if (!fi->src->ft.face) /* Charmap not loaded, FI/FS blank */
 	  {
 	     if (evas_common_font_source_load_complete(fi->src))
 	       return 0;
@@ -112,7 +164,7 @@ evas_common_font_glyph_search(RGBA_Font *fn, RGBA_Font_Int **fi_ret, int gl)
 	  }
 	else /* Charmap not loaded, FS loaded */
 	  {
-	     index = FT_Get_Char_Index(fi->src->ft.face, gl);
+	     index = _evas_common_get_char_index(fi, gl);
 	     if (index != 0)
 	       {
 		  if (!fi->ft.size)
@@ -126,24 +178,245 @@ evas_common_font_glyph_search(RGBA_Font *fn, RGBA_Font_Int **fi_ret, int gl)
    return 0;
 }
 
+
+
+static void
+evas_common_font_draw_internal(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font *fn, int x, int y, const char *text,
+                               RGBA_Gfx_Func func, int ext_x, int ext_y, int ext_w, int ext_h, RGBA_Font_Int *fi,
+                               int im_w, int im_h __UNUSED__, int use_kerning
+                               )
+{
+   int pen_x, pen_y;
+   int chr;
+   FT_Face pface = NULL;
+   FT_UInt prev_index;
+   DATA32 *im;
+   int c;
+   int char_index = 0; /* the index of the current char */
+
+#ifdef INTERNATIONAL_SUPPORT
+   int bidi_err = 0;
+   /*FIXME: should get the direction by parmater */
+   FriBidiCharType direction = FRIBIDI_TYPE_ON;
+   FriBidiLevel *level_list;
+
+   /* change the text to visual ordering and update the level list
+    * for as minimum impact on the code as possible just use text as an
+    * holder, will change in the future.*/
+   {
+      char *tmp = evas_intl_utf8_to_visual(text, &bidi_err, &direction, &level_list);
+      text = (tmp) ? tmp : text;
+   }
+#endif
+
+   pen_x = x;
+   pen_y = y;
+   prev_index = 0;
+   im = dst->image.data;
+   for (char_index = 0, c = 0, chr = 0; text[chr]; char_index++)
+     {
+	FT_UInt index;
+	RGBA_Font_Glyph *fg;
+	int chr_x, chr_y;
+	int gl, kern;
+
+	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
+	if (gl == 0) break;
+	index = evas_common_font_glyph_search(fn, &fi, gl);
+	/* hmmm kerning means i can't sanely do my own cached metric tables! */
+	/* grrr - this means font face sharing is kinda... not an option if */
+	/* you want performance */
+	  if ((use_kerning) && (prev_index) && (index) &&
+	     (pface == fi->src->ft.face))
+	    {
+#ifdef INTERNATIONAL_SUPPORT
+	       /* if it's rtl, the kerning matching should be reversed, i.e prev
+		* index is now the index and the other way around. */
+	       if (evas_intl_is_rtl_char(level_list, char_index))
+		 {
+		    if (evas_common_font_query_kerning(fi, index, prev_index, &kern))
+		      pen_x += kern;
+		 }
+	       else
+#endif
+
+		 {
+
+		    if (evas_common_font_query_kerning(fi, prev_index, index, &kern))
+		      pen_x += kern;
+		 }
+	    }
+
+	  pface = fi->src->ft.face;
+	  fg = evas_common_font_int_cache_glyph_get(fi, index);
+	  if (!fg) continue;
+
+	  if (dc->font_ext.func.gl_new)
+	    {
+	       /* extension calls */
+	       fg->ext_dat = dc->font_ext.func.gl_new(dc->font_ext.data, fg);
+	       fg->ext_dat_free = dc->font_ext.func.gl_free;
+	    }
+
+	  chr_x = (pen_x + (fg->glyph_out->left));
+	  chr_y = (pen_y + (fg->glyph_out->top));
+
+	  if (chr_x < (ext_x + ext_w))
+	    {
+	       DATA8 *data;
+	       int i, j, w, h;
+
+	       data = fg->glyph_out->bitmap.buffer;
+	       j = fg->glyph_out->bitmap.pitch;
+	       w = fg->glyph_out->bitmap.width;
+	       if (j < w) j = w;
+	       h = fg->glyph_out->bitmap.rows;
+	       /*
+		  if ((fg->glyph_out->bitmap.pixel_mode == ft_pixel_mode_grays)
+		  && (fg->glyph_out->bitmap.num_grays == 256)
+		  )
+		  */
+		 {
+		    if ((j > 0) && (chr_x + w > ext_x))
+		      {
+			 if ((fg->ext_dat) && (dc->font_ext.func.gl_draw))
+			   {
+			      /* ext glyph draw */
+			      dc->font_ext.func.gl_draw(dc->font_ext.data,
+				    (void *)dst,
+				    dc, fg,
+				    chr_x,
+				    y - (chr_y - y)
+				    );
+			   }
+			 else
+			   {
+			      if ((fg->glyph_out->bitmap.num_grays == 256) &&
+				    (fg->glyph_out->bitmap.pixel_mode == ft_pixel_mode_grays))
+				{
+				   for (i = 0; i < h; i++)
+				     {
+					int dx, dy;
+					int in_x, in_w;
+
+					in_x = 0;
+					in_w = 0;
+					dx = chr_x;
+					dy = y - (chr_y - i - y);
+#ifdef EVAS_SLI
+					if (((dy) % dc->sli.h) == dc->sli.y)
+#endif
+					  {
+					     if ((dx < (ext_x + ext_w)) &&
+						   (dy >= (ext_y)) &&
+						   (dy < (ext_y + ext_h)))
+					       {
+						  if (dx + w > (ext_x + ext_w))
+						    in_w += (dx + w) - (ext_x + ext_w);
+						  if (dx < ext_x)
+						    {
+						       in_w += ext_x - dx;
+						       in_x = ext_x - dx;
+						       dx = ext_x;
+						    }
+						  if (in_w < w)
+						    {
+						       func(NULL, data + (i * j) + in_x, dc->col.col,
+							     im + (dy * im_w) + dx, w - in_w);
+						    }
+					       }
+					  }
+				     }
+				}
+			      else
+				{
+				   DATA8 *tmpbuf = NULL, *dp, *tp, bits;
+				   int bi, bj;
+				   const DATA8 bitrepl[2] = {0x0, 0xff};
+
+				   tmpbuf = alloca(w);
+				   for (i = 0; i < h; i++)
+				     {
+					int dx, dy;
+					int in_x, in_w, end;
+
+					in_x = 0;
+					in_w = 0;
+					dx = chr_x;
+					dy = y - (chr_y - i - y);
+#ifdef EVAS_SLI
+					if (((dy) % dc->sli.h) == dc->sli.y)
+#endif
+					  {
+					     tp = tmpbuf;
+					     dp = data + (i * fg->glyph_out->bitmap.pitch);
+					     for (bi = 0; bi < w; bi += 8)
+					       {
+						  bits = *dp;
+						  if ((w - bi) < 8) end = w - bi;
+						  else end = 8;
+						  for (bj = 0; bj < end; bj++)
+						    {
+						       *tp = bitrepl[(bits >> (7 - bj)) & 0x1];
+						       tp++;
+						    }
+						  dp++;
+					       }
+					     if ((dx < (ext_x + ext_w)) &&
+						   (dy >= (ext_y)) &&
+						   (dy < (ext_y + ext_h)))
+					       {
+						  if (dx + w > (ext_x + ext_w))
+						    in_w += (dx + w) - (ext_x + ext_w);
+						  if (dx < ext_x)
+						    {
+						       in_w += ext_x - dx;
+						       in_x = ext_x - dx;
+						       dx = ext_x;
+						    }
+						  if (in_w < w)
+						    {
+						       func(NULL, tmpbuf + in_x, dc->col.col,
+							     im + (dy * im_w) + dx, w - in_w);
+						    }
+					       }
+					  }
+				     }
+				}
+			   }
+			 c++;
+		      }
+		 }
+	    }
+	  else
+	    break;
+	  pen_x += fg->glyph->advance.x >> 16;
+	  prev_index = index;
+     }
+#ifdef INTERNATIONAL_SUPPORT
+   if (bidi_err >= 0)
+     {
+	free(level_list);
+	free(text);
+     }
+#endif
+}
+
 EAPI void
 evas_common_font_draw(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font *fn, int x, int y, const char *text)
 {
-   int use_kerning;
-   int pen_x, pen_y;
-   int chr;
-   FT_UInt prev_index;
-   RGBA_Gfx_Func func;
    int ext_x, ext_y, ext_w, ext_h;
-   DATA32 *im;
    int im_w, im_h;
-   int c;
+   int use_kerning;
+   RGBA_Gfx_Func func;
    RGBA_Font_Int *fi;
-   FT_Face pface = NULL;
+   Cutout_Rects *rects;
+   Cutout_Rect  *r;
+   int          c, cx, cy, cw, ch;
+   int          i;
 
    fi = fn->fonts->data;
 
-   im = dst->image.data;
    im_w = dst->cache_entry.w;
    im_h = dst->cache_entry.h;
 
@@ -172,185 +445,38 @@ evas_common_font_draw(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font *fn, int
    if (ext_w <= 0) return;
    if (ext_h <= 0) return;
 
-   pen_x = x;
-   pen_y = y;
    LKL(fn->lock);
    evas_common_font_size_use(fn);
    use_kerning = FT_HAS_KERNING(fi->src->ft.face);
-   prev_index = 0;
    func = evas_common_gfx_func_composite_mask_color_span_get(dc->col.col, dst, 1, dc->render_op);
-   for (c = 0, chr = 0; text[chr];)
+
+   if (!dc->cutout.rects)
      {
-	FT_UInt index;
-	RGBA_Font_Glyph *fg;
-	int chr_x, chr_y;
-	int gl;
-
-	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
-	if (gl == 0) break;
-	index = evas_common_font_glyph_search(fn, &fi, gl);
-	/* hmmm kerning means i can't sanely do my own cached metric tables! */
-	/* grrr - this means font face sharing is kinda... not an option if */
-	/* you want performance */
-        if ((use_kerning) && (prev_index) && (index) &&
-	    (pface == fi->src->ft.face))
-	  {
-	     FT_Vector delta;
-
-	     /* NOTE: ft2 seems to have a bug. and sometimes returns bizarre
-	      * values to kern by - given same font, same size and same
-	      * prev_index and index. auto/bytecode or none hinting doesnt
-	      * matter */
-	     if (FT_Get_Kerning(fi->src->ft.face, prev_index, index,
-				ft_kerning_default, 
-				&delta) == 0)
-	       pen_x += delta.x >> 6;
-	  }
-	pface = fi->src->ft.face;
-	fg = evas_common_font_int_cache_glyph_get(fi, index);
-	if (!fg) continue;
-
-	if (dc->font_ext.func.gl_new)
-	  {
-	     /* extension calls */
-	     fg->ext_dat = dc->font_ext.func.gl_new(dc->font_ext.data, fg);
-	     fg->ext_dat_free = dc->font_ext.func.gl_free;
-	  }
-
-	chr_x = (pen_x + (fg->glyph_out->left));
-	chr_y = (pen_y + (fg->glyph_out->top));
-
-	if (chr_x < (ext_x + ext_w))
-	  {
-	     DATA8 *data;
-	     int i, j, w, h;
-
-	     data = fg->glyph_out->bitmap.buffer;
-	     j = fg->glyph_out->bitmap.pitch;
-	     w = fg->glyph_out->bitmap.width;
-	     if (j < w) j = w;
-	     h = fg->glyph_out->bitmap.rows;
-/*
-	     if ((fg->glyph_out->bitmap.pixel_mode == ft_pixel_mode_grays)
-		 && (fg->glyph_out->bitmap.num_grays == 256)
-		 )
- */
-	       {
-		  if ((j > 0) && (chr_x + w > ext_x))
-		    {
-		       if ((fg->ext_dat) && (dc->font_ext.func.gl_draw))
-			 {
-			    /* ext glyph draw */
-			    dc->font_ext.func.gl_draw(dc->font_ext.data,
-						      (void *)dst,
-						      dc, fg,
-						      chr_x,
-						      y - (chr_y - y)
-						      );
-			 }
-		       else
-			 {
-			    if ((fg->glyph_out->bitmap.num_grays == 256) &&
-				(fg->glyph_out->bitmap.pixel_mode == ft_pixel_mode_grays))
-			      {
-				 for (i = 0; i < h; i++)
-				   {
-				      int dx, dy;
-				      int in_x, in_w;
-
-				      in_x = 0;
-				      in_w = 0;
-				      dx = chr_x;
-				      dy = y - (chr_y - i - y);
-#ifdef EVAS_SLI
-				      if (((dy) % dc->sli.h) == dc->sli.y)
-#endif
-					{
-					   if ((dx < (ext_x + ext_w)) &&
-					       (dy >= (ext_y)) &&
-					       (dy < (ext_y + ext_h)))
-					     {
-						if (dx + w > (ext_x + ext_w))
-						  in_w += (dx + w) - (ext_x + ext_w);
-						if (dx < ext_x)
-						  {
-						     in_w += ext_x - dx;
-						     in_x = ext_x - dx;
-						     dx = ext_x;
-						  }
-						if (in_w < w)
-						  {
-						     func(NULL, data + (i * j) + in_x, dc->col.col,
-							  im + (dy * im_w) + dx, w - in_w);
-						  }
-					     }
-					}
-				   }
-			      }
-			    else
-			      {
-				 DATA8 *tmpbuf = NULL, *dp, *tp, bits;
-				 int bi, bj;
-				 const DATA8 bitrepl[2] = {0x0, 0xff};
-
-				 tmpbuf = alloca(w);
-				 for (i = 0; i < h; i++)
-				   {
-				      int dx, dy;
-				      int in_x, in_w, end;
-
-				      in_x = 0;
-				      in_w = 0;
-				      dx = chr_x;
-				      dy = y - (chr_y - i - y);
-#ifdef EVAS_SLI
-				      if (((dy) % dc->sli.h) == dc->sli.y)
-#endif
-					{
-					   tp = tmpbuf;
-					   dp = data + (i * fg->glyph_out->bitmap.pitch);
-					   for (bi = 0; bi < w; bi += 8)
-					     {
-						bits = *dp;
-						if ((w - bi) < 8) end = w - bi;
-						else end = 8;
-						for (bj = 0; bj < end; bj++)
-						  {
-						     *tp = bitrepl[(bits >> (7 - bj)) & 0x1];
-						     tp++;
-						  }
-						dp++;
-					     }
-					   if ((dx < (ext_x + ext_w)) &&
-					       (dy >= (ext_y)) &&
-					       (dy < (ext_y + ext_h)))
-					     {
-						if (dx + w > (ext_x + ext_w))
-						  in_w += (dx + w) - (ext_x + ext_w);
-						if (dx < ext_x)
-						  {
-						     in_w += ext_x - dx;
-						     in_x = ext_x - dx;
-						     dx = ext_x;
-						  }
-						if (in_w < w)
-						  {
-						     func(NULL, tmpbuf + in_x, dc->col.col,
-							  im + (dy * im_w) + dx, w - in_w);
-						  }
-					     }
-					}
-				   }
-			      }
-			 }
-		       c++;
-		    }
-	       }
-	  }
-	else
-	  break;
-	pen_x += fg->glyph->advance.x >> 16;
-	prev_index = index;
+        evas_common_font_draw_internal(dst, dc, fn, x, y, text,
+                                       func, ext_x, ext_y, ext_w, ext_h, fi,
+                                       im_w, im_h, use_kerning
+                                       );
+     }
+   else
+     {
+        c = dc->clip.use; cx = dc->clip.x; cy = dc->clip.y; cw = dc->clip.w; ch = dc->clip.h;
+        evas_common_draw_context_clip_clip(dc, 0, 0, dst->cache_entry.w, dst->cache_entry.h);
+        /* our clip is 0 size.. abort */
+        if ((dc->clip.w > 0) && (dc->clip.h > 0))
+          {
+             rects = evas_common_draw_context_apply_cutouts(dc);
+             for (i = 0; i < rects->active; ++i)
+               {
+                  r = rects->rects + i;
+                  evas_common_draw_context_set_clip(dc, r->x, r->y, r->w, r->h);
+                  evas_common_font_draw_internal(dst, dc, fn, x, y, text,
+                                                 func, r->x, r->y, r->w, r->h, fi,
+                                                 im_w, im_h, use_kerning
+                                                 );
+               }
+             evas_common_draw_context_apply_clear_cutouts(rects);
+          }
+        dc->clip.use = c; dc->clip.x = cx; dc->clip.y = cy; dc->clip.w = cw; dc->clip.h = ch;
      }
    LKU(fn->lock);
 }

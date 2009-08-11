@@ -4,8 +4,8 @@
 #include <librsvg/rsvg.h>
 #include <librsvg/rsvg-cairo.h>
 
-int evas_image_load_file_head_svg(Image_Entry *ie, const char *file, const char *key);
-int evas_image_load_file_data_svg(Image_Entry *ie, const char *file, const char *key);
+static int evas_image_load_file_head_svg(Image_Entry *ie, const char *file, const char *key);
+static int evas_image_load_file_data_svg(Image_Entry *ie, const char *file, const char *key);
 
 Evas_Image_Load_Func evas_image_load_svg_func =
 {
@@ -35,8 +35,8 @@ svg_loader_unpremul_data(DATA32 *data, unsigned int len)
      }
 }
 
-int
-evas_image_load_file_head_svg(Image_Entry *ie, const char *file, const char *key)
+static int
+evas_image_load_file_head_svg(Image_Entry *ie, const char *file, const char *key __UNUSED__)
 {
    char               cwd[PATH_MAX], pcwd[PATH_MAX], *p;
    
@@ -131,8 +131,8 @@ evas_image_load_file_head_svg(Image_Entry *ie, const char *file, const char *key
 }
 
 /** FIXME: All evas loaders need to be tightened up **/
-int
-evas_image_load_file_data_svg(Image_Entry *ie, const char *file, const char *key)
+static int
+evas_image_load_file_data_svg(Image_Entry *ie, const char *file, const char *key __UNUSED__)
 {
    DATA32             *pixels;
    char               cwd[PATH_MAX], pcwd[PATH_MAX], *p;
@@ -268,7 +268,7 @@ evas_image_load_file_data_svg(Image_Entry *ie, const char *file, const char *key
    return 1;
 }
 
-EAPI int
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -278,19 +278,27 @@ module_open(Evas_Module *em)
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
    if (!rsvg_initialized) return;
    rsvg_term();
    rsvg_initialized = 0;
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
    EVAS_MODULE_API_VERSION,
-     EVAS_MODULE_TYPE_IMAGE_LOADER,
-     "svg",
-     "none"
+   "svg",
+   "none",
+   {
+     module_open,
+     module_close
+   }
 };
 
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_IMAGE_LOADER, image_loader, svg);
+
+#ifndef EVAS_STATIC_BUILD_SVG
+EVAS_EINA_MODULE_DEFINE(image_loader, svg);
+#endif

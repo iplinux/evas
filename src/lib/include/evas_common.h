@@ -16,8 +16,70 @@
 
 #include "evas_options.h"
 
+#if defined(__ARM_ARCH_3M__)
+# define __ARM_ARCH__ 40
+#endif
+#if defined(__ARM_ARCH_4__)
+# define __ARM_ARCH__ 40
+#endif
+#if defined(__ARM_ARCH_4T__)
+# define __ARM_ARCH__ 41
+#endif
+
+#if defined(__ARM_ARCH_5__)
+# define __ARM_ARCH__ 50
+#endif
+#if defined(__ARM_ARCH_5T__)
+# define __ARM_ARCH__ 51
+#endif
+#if defined(__ARM_ARCH_5E__)
+# define __ARM_ARCH__ 52
+#endif
+#if defined(__ARM_ARCH_5TE__)
+# define __ARM_ARCH__ 53
+#endif
+#if defined(__ARM_ARCH_5TEJ__)
+# define __ARM_ARCH__ 54
+#endif
+
+#if defined(__ARM_ARCH_6__)
+# define __ARM_ARCH__ 60
+#endif
+#if defined(__ARM_ARCH_6J__)
+# define __ARM_ARCH__ 61
+#endif
+#if defined(__ARM_ARCH_6K__)
+# define __ARM_ARCH__ 62
+#endif
+#if defined(__ARM_ARCH_6Z__)
+# define __ARM_ARCH__ 63
+#endif
+#if defined(__ARM_ARCH_6ZK__)
+# define __ARM_ARCH__ 64
+#endif
+#if defined(__ARM_ARCH_6T2__)
+# define __ARM_ARCH__ 65
+#endif
+
+#if defined(__ARM_ARCH_7__)
+# define __ARM_ARCH__ 70
+#endif
+#if defined(__ARM_ARCH_7A__)
+# define __ARM_ARCH__ 71
+#endif
+#if defined(__ARM_ARCH_7R__)
+# define __ARM_ARCH__ 72
+#endif
+#if defined(__ARM_ARCH_7M__)
+# define __ARM_ARCH__ 73
+#endif
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
+
+#ifndef BUILD_PTHREAD
+#undef BUILD_PIPE_RENDER
 #endif
 
 #ifdef BUILD_PTHREAD
@@ -32,6 +94,7 @@
 # define LKI(x) pthread_mutex_init(&(x), NULL);
 # define LKD(x) pthread_mutex_destroy(&(x));
 # define LKL(x) pthread_mutex_lock(&(x));
+# define LKT(x) pthread_mutex_trylock(&(x));
 # define LKU(x) pthread_mutex_unlock(&(x));
 # define TH(x)  pthread_t x
 # define THI(x) int x
@@ -46,6 +109,7 @@
 # define LKI(x)
 # define LKD(x)
 # define LKL(x)
+# define LKT(x) 0
 # define LKU(x)
 # define TH(x)
 # define THI(x)
@@ -127,6 +191,95 @@ void *alloca (size_t);
 
 /*****************************************************************************/
 
+#if defined(__ARM_ARCH_3M__)
+# define __ARM_ARCH__ 40
+#endif
+#if defined(__ARM_ARCH_4__)
+# define __ARM_ARCH__ 40
+#endif
+#if defined(__ARM_ARCH_4T__)
+# define __ARM_ARCH__ 41
+#endif
+
+#if defined(__ARM_ARCH_5__)
+# define __ARM_ARCH__ 50
+#endif
+#if defined(__ARM_ARCH_5T__)
+# define __ARM_ARCH__ 51
+#endif
+#if defined(__ARM_ARCH_5E__)
+# define __ARM_ARCH__ 52
+#endif
+#if defined(__ARM_ARCH_5TE__)
+# define __ARM_ARCH__ 53
+#endif
+#if defined(__ARM_ARCH_5TEJ__)
+# define __ARM_ARCH__ 54
+#endif
+
+#if defined(__ARM_ARCH_6__)
+# define __ARM_ARCH__ 60
+#endif
+#if defined(__ARM_ARCH_6J__)
+# define __ARM_ARCH__ 61
+#endif
+#if defined(__ARM_ARCH_6K__)
+# define __ARM_ARCH__ 62
+#endif
+#if defined(__ARM_ARCH_6Z__)
+# define __ARM_ARCH__ 63
+#endif
+#if defined(__ARM_ARCH_6ZK__)
+# define __ARM_ARCH__ 64
+#endif
+#if defined(__ARM_ARCH_6T2__)
+# define __ARM_ARCH__ 65
+#endif
+
+#if defined(__ARM_ARCH_7__)
+# define __ARM_ARCH__ 70
+#endif
+#if defined(__ARM_ARCH_7A__)
+# define __ARM_ARCH__ 71
+#endif
+#if defined(__ARM_ARCH_7R__)
+# define __ARM_ARCH__ 72
+#endif
+#if defined(__ARM_ARCH_7M__)
+# define __ARM_ARCH__ 73
+#endif
+
+#if defined(__ARM_ARCH__) && (__ARM_ARCH__ >= 52)
+/* tested on ARMv6 (arm1136j-s), Nokia N800 CPU */
+#define pld(addr, off)                                                  \
+   __asm__("pld [%[address], %[offset]]"::                              \
+           [address] "r" (addr), [offset] "i" (off))
+#else
+#define pld(addr, off)
+#endif /* __ARMEL__ */
+
+/*****************************************************************************/
+
+#define UNROLL2(op...) op op
+#define UNROLL4(op...) UNROLL2(op) UNROLL2(op)
+#define UNROLL8(op...) UNROLL4(op) UNROLL4(op)
+#define UNROLL16(op...) UNROLL8(op) UNROLL8(op)
+
+#define UNROLL8_PLD_WHILE(start, size, end, op)         \
+    pld(start, 0);                                      \
+    end = start + (size & ~7);                          \
+    while (start < end)                                 \
+        {                                               \
+            pld(start, 32);                             \
+            UNROLL8(op);                                \
+        }                                               \
+    end += (size & 7);                                  \
+    pld(start, 32);                                     \
+    while (start <  end)                                \
+        {                                               \
+        op;                                             \
+        }
+
 /*****************************************************************************/
 
 typedef unsigned long long		DATA64;
@@ -137,11 +290,14 @@ typedef unsigned char                   DATA8;
 typedef struct _Image_Entry             Image_Entry;
 typedef struct _Image_Entry_Flags	Image_Entry_Flags;
 typedef struct _Engine_Image_Entry      Engine_Image_Entry;
+typedef struct _Evas_Cache_Target       Evas_Cache_Target;
 
 typedef struct _RGBA_Image_Loadopts   RGBA_Image_Loadopts;
+#ifdef BUILD_PIPE_RENDER
 typedef struct _RGBA_Pipe_Op          RGBA_Pipe_Op;
 typedef struct _RGBA_Pipe             RGBA_Pipe;
 typedef struct _RGBA_Pipe_Thread_Info RGBA_Pipe_Thread_Info;
+#endif
 typedef struct _RGBA_Image            RGBA_Image;
 typedef struct _RGBA_Image_Span       RGBA_Image_Span;
 typedef struct _RGBA_Draw_Context     RGBA_Draw_Context;
@@ -234,7 +390,8 @@ typedef enum _CPU_Features
    CPU_FEATURE_SSE     = (1 << 2),
    CPU_FEATURE_ALTIVEC = (1 << 3),
    CPU_FEATURE_VIS     = (1 << 4),
-   CPU_FEATURE_VIS2    = (1 << 5)
+   CPU_FEATURE_VIS2    = (1 << 5),
+   CPU_FEATURE_NEON    = (1 << 6)
 } CPU_Features;
 
 typedef enum _Font_Hint_Flags
@@ -255,61 +412,71 @@ struct _RGBA_Image_Loadopts
 
 struct _Image_Entry_Flags
 {
-   Evas_Bool loaded       : 1;
-   Evas_Bool dirty        : 1;
-   Evas_Bool activ        : 1;
-   Evas_Bool need_data    : 1;
-   Evas_Bool lru_nodata   : 1;
-   Evas_Bool cached       : 1;
-   Evas_Bool alpha        : 1;
-   Evas_Bool alpha_sparse : 1;
+   Eina_Bool loaded       : 1;
+   Eina_Bool dirty        : 1;
+   Eina_Bool activ        : 1;
+   Eina_Bool need_data    : 1;
+   Eina_Bool lru_nodata   : 1;
+   Eina_Bool cached       : 1;
+   Eina_Bool alpha        : 1;
+   Eina_Bool alpha_sparse : 1;
 #ifdef BUILD_ASYNC_PRELOAD
-   Evas_Bool preload      : 1;
+   Eina_Bool preload      : 1;
 #endif
+};
+
+struct _Evas_Cache_Target
+{
+  EINA_INLIST;
+  const void *target;
 };
 
 struct _Image_Entry
 {
-  EINA_INLIST;
+   EINA_INLIST;
 
-  Evas_Cache_Image      *cache;
+   Evas_Cache_Image      *cache;
 
-  const char            *cache_key;
+   const char            *cache_key;
 
-  const char            *file;
-  const char            *key;
+   const char            *file;
+   const char            *key;
 
-  const void            *target;
+   Evas_Cache_Target     *targets;
 
-  time_t                 timestamp;
-  time_t                 laststat;
+   time_t                 timestamp;
+   time_t                 laststat;
 
-  int                    references;
+   int                    references;
 
-  unsigned char          scale;
+   unsigned char          scale;
 
-  RGBA_Image_Loadopts    load_opts;
-  int                    space;
-  int                    w;
-  int                    h;
+   RGBA_Image_Loadopts    load_opts;
+   int                    space;
+   int                    w;
+   int                    h;
 
-  struct
-  {
-     int		 w;
-     int		 h;
-  } allocated;
+   struct
+     {
+        int		 w;
+        int		 h;
+     } allocated;
 
-  struct
-  {
-     void		*module;
-     void		*loader;
-  } info;
+   struct
+     {
+        void		*module;
+        void		*loader;
+     } info;
 
 #ifdef BUILD_ASYNC_PRELOAD
-   pthread_mutex_t lock;
+   LK(lock);
 #endif
 
-  Image_Entry_Flags      flags;
+   Image_Entry_Flags      flags;
+   Evas_Image_Scale_Hint  scale_hint;
+   void                  *data1, *data2;
+   int                    server_id;
+   int                    connect_num;
 };
 
 struct _Engine_Image_Entry
@@ -325,11 +492,11 @@ struct _Engine_Image_Entry
 
    struct
    {
-     Evas_Bool                   cached : 1;
-     Evas_Bool                   activ : 1;
-     Evas_Bool                   dirty : 1;
-     Evas_Bool                   loaded : 1;
-     Evas_Bool                   need_parent : 1;
+     Eina_Bool                   cached : 1;
+     Eina_Bool                   activ : 1;
+     Eina_Bool                   dirty : 1;
+     Eina_Bool                   loaded : 1;
+     Eina_Bool                   need_parent : 1;
    } flags;
 
    int                           references;
@@ -359,7 +526,7 @@ struct _Evas_Common_Transform
 struct _RGBA_Draw_Context
 {
    struct {
-      Evas_Bool use : 1;
+      Eina_Bool use : 1;
       DATA32 col;
    } mul;
    struct {
@@ -367,7 +534,7 @@ struct _RGBA_Draw_Context
    } col;
    struct RGBA_Draw_Context_clip {
       int    x, y, w, h;
-      Evas_Bool use : 1;
+      Eina_Bool use : 1;
    } clip;
    Cutout_Rects cutout;
    struct {
@@ -385,9 +552,10 @@ struct _RGBA_Draw_Context
       int y, h;
    } sli;
    int            render_op;
-   Evas_Bool anti_alias : 1;
+   Eina_Bool anti_alias : 1;
 };
 
+#ifdef BUILD_PIPE_RENDER
 struct _RGBA_Pipe_Op
 {
    RGBA_Draw_Context         context;
@@ -440,6 +608,7 @@ struct _RGBA_Pipe_Thread_Info
    RGBA_Image *im;
    int         x, y, w, h;
 };
+#endif
 
 struct _RGBA_Image
 {
@@ -448,15 +617,17 @@ struct _RGBA_Image
    RGBA_Image_Flags     flags;
    struct
      {
-/* 	void           *module; */
-/* 	void           *loader; */
-/* 	char           *real_file; */
+/*	void           *module; */
+/*	void           *loader; */
+/*	char           *real_file; */
 	char           *comment;
 //	int             format;
      } info;
 
    void                *extended_info;
+#ifdef BUILD_PIPE_RENDER
    RGBA_Pipe           *pipe;
+#endif
    int                  ref;
 
 /*    unsigned char        scale; */
@@ -464,16 +635,25 @@ struct _RGBA_Image
    /* Colorspace stuff. */
    struct {
       void              *data;
-      Evas_Bool          no_free : 1;
-      Evas_Bool          dirty : 1;
+      Eina_Bool          no_free : 1;
+      Eina_Bool          dirty : 1;
    } cs;
 
    /* RGBA stuff */
-   struct
-   {
+   struct {
       DATA32            *data;
-      Evas_Bool          no_free : 1;
+      Eina_Bool          no_free : 1;
    } image;
+
+   struct {
+      LK(lock);
+      Eina_List *list;
+      unsigned long long orig_usage;
+      unsigned long long usage_count;
+      int populate_count;
+      unsigned long long newest_usage;
+      unsigned long long newest_usage_count;
+   } cache;
 };
 
 struct _RGBA_Gradient_Color_Stop
@@ -499,7 +679,7 @@ struct _RGBA_Gradient
 	float          angle;
 	int            direction;
 	float          offset;
-	Evas_Bool      has_alpha : 1;
+	Eina_Bool      has_alpha : 1;
      } map;
 
    struct {
@@ -531,8 +711,8 @@ struct _RGBA_Gradient
 
    int references;
 
-   Evas_Bool imported_data : 1;
-   Evas_Bool has_alpha : 1;
+   Eina_Bool imported_data : 1;
+   Eina_Bool has_alpha : 1;
 };
 
 struct _RGBA_Gradient_Type
@@ -563,7 +743,7 @@ struct _RGBA_Gradient2
      {
 	DATA32        *data;
 	int            len;
-	Evas_Bool      has_alpha : 1;
+	Eina_Bool      has_alpha : 1;
      } map;
 
    struct {
@@ -588,7 +768,7 @@ struct _RGBA_Gradient2
 
    int references;
 
-   Evas_Bool has_alpha : 1;
+   Eina_Bool has_alpha : 1;
 };
 
 struct _RGBA_Gradient2_Type
@@ -622,8 +802,6 @@ struct _RGBA_Font
 
 struct _RGBA_Font_Int
 {
-   EINA_INLIST;
-
    RGBA_Font_Source *src;
 
    int               size;
@@ -635,23 +813,29 @@ struct _RGBA_Font_Int
 
    Eina_Hash       *glyphs;
 
+   LK(ft_mutex);
+
+   Eina_Hash       *kerning;
+   Eina_Hash       *indexes;
+
    int              usage;
    Font_Hint_Flags hinting;
 
    int              references;
+
 };
 
 struct _RGBA_Font_Source
 {
-   EINA_INLIST;
-
    const char       *name;
    const char       *file;
 
    void             *data;
    int               data_size;
    int               current_size;
+#if 0 /* FIXME: charmap user is disabled and use a deprecated data type. */
    Evas_Array_Hash  *charmap;
+#endif
 
    struct {
       int           orig_upem;
@@ -663,6 +847,7 @@ struct _RGBA_Font_Source
 
 struct _RGBA_Font_Glyph
 {
+   FT_UInt         index;
    FT_Glyph        glyph;
    FT_BitmapGlyph  glyph_out;
    /* this is a problem - only 1 engine at a time can extend such a font... grrr */
@@ -771,12 +956,12 @@ struct _Tilebuf
 
 struct _Tilebuf_Tile
 {
-   Evas_Bool redraw : 1;
+   Eina_Bool redraw : 1;
 /* FIXME: need these flags later - but not now */
 /*
-   Evas_Bool done   : 1;
-   Evas_Bool edge   : 1;
-   Evas_Bool from   : 1;
+   Eina_Bool done   : 1;
+   Eina_Bool edge   : 1;
+   Eina_Bool from   : 1;
 
    struct {
       int dx, dy;
@@ -944,13 +1129,21 @@ Tilebuf_Rect *evas_common_regionbuf_rects_get (Regionbuf *rb);
 #include "../engines/common/evas_draw.h"
 
 /****/
-#include "../engines/common/evas_pipe.h"
+#ifdef BUILD_PIPE_RENDER
+# include "../engines/common/evas_pipe.h"
+#endif
 
 void              evas_font_dir_cache_free(void);
 
 /****/
 
 /*****************************************************************************/
+
+#if defined(__ARM_ARCH__) && (__ARM_ARCH__ >= 70)
+#ifdef BUILD_NEON
+# include <arm_neon.h>
+#endif
+#endif
 
 #ifdef __cplusplus
 }

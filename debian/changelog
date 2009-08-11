@@ -1,3 +1,9 @@
+evas (0.9.9.062-1) asimov; urgency=low
+
+  * 03-svn
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Wed, 12 Aug 2009 02:28:12 +0700
+
 evas (0.9.9.050-20090103-5) asimov; urgency=low
  
   [ Mikhail Gusarov ]
@@ -41,12 +47,12 @@ evas (0.9.9.050-20090103-1) unstable; urgency=low
 
 evas (0.9.9.050-1) unstable; urgency=low
 
-  * a SVN release.
+  * Clean up changelog
 
- -- quaker <quaker66@gmail.com>  Sat, 27 Dec 2008 14:20:11 +0100
+ -- quaker <quaker66@gmail.com>  Thu, 22 Apr 2009 18:27:21 +0100
 
-evas (0.9.9.043-1) unstable; urgency=low
+evas (0.9.9.050+svnYYYYMMDD-1) unstable; urgency=low
 
-  * a CVS snapshot release.
+  * Clean up changelog
 
- -- Falko Schmidt <falko@alphagemini.org>  Fri, 4 Apr 2008 15:13:56 +0000
+ -- quaker <quaker66@gmail.com>  Tue, 21 Apr 2009 19:13:59 +0100

@@ -89,6 +89,13 @@ evas_common_gfx_compositor_copy_rel_get(void)
 # include "./evas_op_copy/op_copy_mask_color_i386.c"
 //# include "./evas_op_copy/op_copy_pixel_mask_color_i386.c"
 
+# include "./evas_op_copy/op_copy_pixel_neon.c"
+# include "./evas_op_copy/op_copy_color_neon.c"
+# include "./evas_op_copy/op_copy_pixel_color_neon.c"
+# include "./evas_op_copy/op_copy_pixel_mask_neon.c"
+# include "./evas_op_copy/op_copy_mask_color_neon.c"
+//# include "./evas_op_copy/op_copy_pixel_mask_color_neon.c"
+
 
 static void
 op_copy_init(void)
@@ -107,6 +114,19 @@ op_copy_init(void)
    init_copy_pixel_mask_pt_funcs_mmx();
    init_copy_color_pt_funcs_mmx();
    init_copy_mask_color_pt_funcs_mmx();
+#endif
+#ifdef BUILD_NEON
+   init_copy_pixel_span_funcs_neon();
+   init_copy_pixel_color_span_funcs_neon();
+   init_copy_pixel_mask_span_funcs_neon();
+   init_copy_color_span_funcs_neon();
+   init_copy_mask_color_span_funcs_neon();
+
+   init_copy_pixel_pt_funcs_neon();
+   init_copy_pixel_color_pt_funcs_neon();
+   init_copy_pixel_mask_pt_funcs_neon();
+   init_copy_color_pt_funcs_neon();
+   init_copy_mask_color_pt_funcs_neon();
 #endif
 #ifdef BUILD_C
    init_copy_pixel_span_funcs_c();
@@ -141,6 +161,14 @@ copy_gfx_span_func_cpu(int s, int m, int c, int d)
       if (func) return func;
     }
 #endif
+#ifdef BUILD_NEON
+   if (evas_common_cpu_has_feature(CPU_FEATURE_NEON))
+    {
+      cpu = CPU_NEON;
+      func = op_copy_span_funcs[s][m][c][d][cpu];
+      if (func) return func;
+    }
+#endif
 #ifdef BUILD_C
    cpu = CPU_C;
    func = op_copy_span_funcs[s][m][c][d][cpu];
@@ -150,7 +178,7 @@ copy_gfx_span_func_cpu(int s, int m, int c, int d)
 }
 
 static RGBA_Gfx_Func
-op_copy_pixel_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels)
+op_copy_pixel_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_AN, m = SM_N, c = SC_N, d = DP_AN;
 
@@ -165,7 +193,7 @@ op_copy_pixel_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels)
 }
 
 static RGBA_Gfx_Func
-op_copy_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
+op_copy_color_span_get(DATA32 col, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_N, m = SM_N, c = SC_AN, d = DP_AN;
 
@@ -185,7 +213,7 @@ op_copy_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
 }
 
 static RGBA_Gfx_Func
-op_copy_pixel_color_span_get(RGBA_Image *src, DATA32 col, RGBA_Image *dst, int pixels)
+op_copy_pixel_color_span_get(RGBA_Image *src, DATA32 col, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_AN, m = SM_N, c = SC_AN, d = DP_AN;
 
@@ -211,7 +239,7 @@ op_copy_pixel_color_span_get(RGBA_Image *src, DATA32 col, RGBA_Image *dst, int p
 }
 
 static RGBA_Gfx_Func
-op_copy_mask_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
+op_copy_mask_color_span_get(DATA32 col, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_N, m = SM_AS, c = SC_AN, d = DP;
 
@@ -227,7 +255,7 @@ op_copy_mask_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
 }
 
 static RGBA_Gfx_Func
-op_copy_pixel_mask_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels)
+op_copy_pixel_mask_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_AN, m = SM_AS, c = SC_N, d = DP;
 
@@ -247,6 +275,14 @@ copy_gfx_pt_func_cpu(int s, int m, int c, int d)
    if (evas_common_cpu_has_feature(CPU_FEATURE_MMX))
     {
       cpu = CPU_MMX;
+      func = op_copy_pt_funcs[s][m][c][d][cpu];
+      if (func) return func;
+    }
+#endif
+#ifdef BUILD_NEON
+   if (evas_common_cpu_has_feature(CPU_FEATURE_NEON))
+    {
+      cpu = CPU_NEON;
       func = op_copy_pt_funcs[s][m][c][d][cpu];
       if (func) return func;
     }
@@ -367,6 +403,19 @@ op_copy_rel_init(void)
    init_copy_rel_color_pt_funcs_mmx();
    init_copy_rel_mask_color_pt_funcs_mmx();
 #endif
+#ifdef BUILD_NEON
+   init_copy_rel_pixel_span_funcs_neon();
+   init_copy_rel_pixel_color_span_funcs_neon();
+   init_copy_rel_pixel_mask_span_funcs_neon();
+   init_copy_rel_color_span_funcs_neon();
+   init_copy_rel_mask_color_span_funcs_neon();
+
+   init_copy_rel_pixel_pt_funcs_neon();
+   init_copy_rel_pixel_color_pt_funcs_neon();
+   init_copy_rel_pixel_mask_pt_funcs_neon();
+   init_copy_rel_color_pt_funcs_neon();
+   init_copy_rel_mask_color_pt_funcs_neon();
+#endif
 #ifdef BUILD_C
    init_copy_rel_pixel_span_funcs_c();
    init_copy_rel_pixel_color_span_funcs_c();
@@ -400,6 +449,14 @@ copy_rel_gfx_span_func_cpu(int s, int m, int c, int d)
       if (func) return func;
     }
 #endif
+#ifdef BUILD_NEON
+   if (evas_common_cpu_has_feature(CPU_FEATURE_NEON))
+    {
+      cpu = CPU_NEON;
+      func = op_copy_rel_span_funcs[s][m][c][d][cpu];
+      if (func) return func;
+    }
+#endif
 #ifdef BUILD_C
    cpu = CPU_C;
    func = op_copy_rel_span_funcs[s][m][c][d][cpu];
@@ -409,7 +466,7 @@ copy_rel_gfx_span_func_cpu(int s, int m, int c, int d)
 }
 
 static RGBA_Gfx_Func
-op_copy_rel_pixel_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels)
+op_copy_rel_pixel_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_AN, m = SM_N, c = SC_N, d = DP_AN;
 
@@ -425,7 +482,7 @@ op_copy_rel_pixel_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels)
 }
 
 static RGBA_Gfx_Func
-op_copy_rel_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
+op_copy_rel_color_span_get(DATA32 col, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_N, m = SM_N, c = SC_AN, d = DP_AN;
 
@@ -445,7 +502,7 @@ op_copy_rel_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
 }
 
 static RGBA_Gfx_Func
-op_copy_rel_pixel_color_span_get(RGBA_Image *src, DATA32 col, RGBA_Image *dst, int pixels)
+op_copy_rel_pixel_color_span_get(RGBA_Image *src, DATA32 col, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_AN, m = SM_N, c = SC_AN, d = DP_AN;
 
@@ -471,7 +528,7 @@ op_copy_rel_pixel_color_span_get(RGBA_Image *src, DATA32 col, RGBA_Image *dst, i
 }
 
 static RGBA_Gfx_Func
-op_copy_rel_mask_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
+op_copy_rel_mask_color_span_get(DATA32 col, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_N, m = SM_AS, c = SC_AN, d = DP;
 
@@ -487,7 +544,7 @@ op_copy_rel_mask_color_span_get(DATA32 col, RGBA_Image *dst, int pixels)
 }
 
 static RGBA_Gfx_Func
-op_copy_rel_pixel_mask_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels)
+op_copy_rel_pixel_mask_span_get(RGBA_Image *src, RGBA_Image *dst, int pixels __UNUSED__)
 {
    int  s = SP_AN, m = SM_AS, c = SC_N, d = DP;
 
@@ -507,6 +564,14 @@ copy_rel_gfx_pt_func_cpu(int s, int m, int c, int d)
    if (evas_common_cpu_has_feature(CPU_FEATURE_MMX))
     {
       cpu = CPU_MMX;
+      func = op_copy_rel_pt_funcs[s][m][c][d][cpu];
+      if (func) return func;
+    }
+#endif
+#ifdef BUILD_NEON
+   if (evas_common_cpu_has_feature(CPU_FEATURE_NEON))
+    {
+      cpu = CPU_NEON;
       func = op_copy_rel_pt_funcs[s][m][c][d][cpu];
       if (func) return func;
     }

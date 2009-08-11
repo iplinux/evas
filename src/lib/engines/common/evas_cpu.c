@@ -11,6 +11,7 @@
 #ifndef _WIN32
 #include <signal.h>
 #include <setjmp.h>
+#include <errno.h>
 
 static sigjmp_buf detect_buf;
 #endif
@@ -22,13 +23,13 @@ static void evas_common_cpu_catch_ill(int sig);
 static void evas_common_cpu_catch_segv(int sig);
 
 static void
-evas_common_cpu_catch_ill(int sig)
+evas_common_cpu_catch_ill(int sig __UNUSED__)
 {
    siglongjmp(detect_buf, 1);
 }
 
 static void
-evas_common_cpu_catch_segv(int sig)
+evas_common_cpu_catch_segv(int sig __UNUSED__)
 {
    siglongjmp(detect_buf, 1);
 }
@@ -74,6 +75,18 @@ evas_common_cpu_altivec_test(void)
    zero = vec_splat_u32(0);
 #endif /* __VEC__ */
 #endif /* __POWERPC__ */
+}
+
+void
+evas_common_cpu_neon_test(void)
+{
+#if defined(__ARM_ARCH__) && (__ARM_ARCH__ >= 70)
+#ifdef BUILD_NEON
+   asm volatile (
+                 "vqadd.u8 d0, d1, d0\n"
+                 );
+#endif
+#endif
 }
 
 void
@@ -128,13 +141,19 @@ evas_common_cpu_init(void)
    cpu_feature_mask |= CPU_FEATURE_MMX *
      evas_common_cpu_feature_test(evas_common_cpu_mmx_test);
    evas_common_cpu_end_opt();
+   if (getenv("EVAS_CPU_NO_MMX"))
+     cpu_feature_mask &= ~CPU_FEATURE_MMX;
    cpu_feature_mask |= CPU_FEATURE_MMX2 *
      evas_common_cpu_feature_test(evas_common_cpu_mmx2_test);
    evas_common_cpu_end_opt();
+   if (getenv("EVAS_CPU_NO_MMX2"))
+     cpu_feature_mask &= ~CPU_FEATURE_MMX2;
 #ifdef BUILD_SSE
    cpu_feature_mask |= CPU_FEATURE_SSE *
      evas_common_cpu_feature_test(evas_common_cpu_sse_test);
    evas_common_cpu_end_opt();
+   if (getenv("EVAS_CPU_NO_SSE"))
+     cpu_feature_mask &= ~CPU_FEATURE_SSE;
 #endif /* BUILD_SSE */
 #endif /* BUILD_MMX */
 #ifdef __POWERPC__
@@ -142,13 +161,24 @@ evas_common_cpu_init(void)
    cpu_feature_mask |= CPU_FEATURE_ALTIVEC *
      evas_common_cpu_feature_test(evas_common_cpu_altivec_test);
    evas_common_cpu_end_opt();
+   if (getenv("EVAS_CPU_NO_ALTIVEC"))
+     cpu_feature_mask &= ~CPU_FEATURE_ALTIVEC;
 #endif /* __VEC__ */
 #endif /* __POWERPC__ */
 #ifdef __SPARC__
    cpu_feature_mask |= CPU_FEATURE_VIS *
      evas_common_cpu_feature_test(evas_common_cpu_vis_test);
    evas_common_cpu_end_opt();
+   if (getenv("EVAS_CPU_NO_VIS"))
+     cpu_feature_mask &= ~CPU_FEATURE_VIS;
 #endif /* __SPARC__ */
+#if defined(__ARM_ARCH__) && (__ARM_ARCH__ >= 70)
+#ifdef BUILD_NEON
+   cpu_feature_mask |= CPU_FEATURE_NEON *
+     evas_common_cpu_feature_test(evas_common_cpu_neon_test);
+   evas_common_cpu_end_opt();
+#endif
+#endif
 }
 
 int
@@ -226,7 +256,12 @@ evas_common_cpu_count(void)
 
    if (cpus != 0) return cpus;
 
-   sched_getaffinity(getpid(), sizeof(cpu), &cpu);
+   CPU_ZERO(&cpu);
+   if (sched_getaffinity(0, sizeof(cpu), &cpu) != 0)
+     {
+	printf("[Evas] could not get cpu affinity: %s\n", strerror(errno));
+	return 1;
+     }
    for (i = 0; i < TH_MAX; i++)
      {
 	if (CPU_ISSET(i, &cpu)) cpus = i + 1;

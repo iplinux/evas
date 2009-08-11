@@ -28,7 +28,7 @@ static int shmcountlimit = 32;
 static X_Output_Buffer *
 _find_xob(Display *d, Visual *v, int depth, int w, int h, int shm, void *data)
 {
-   Eina_List *l, *xl;
+   Eina_List *l, *xl = NULL;
    X_Output_Buffer *xob = NULL;
    X_Output_Buffer *xob2;
    int fitness = 0x7fffffff;
@@ -268,7 +268,7 @@ evas_software_xlib_outbuf_setup_x(int w, int h, int rot, Outbuf_Depth depth,
 		  }
 		/* FIXME: only alloc once per display+cmap */
 		buf->priv.pal = evas_software_xlib_x_color_allocate(disp, cmap, vis,
-								   PAL_MODE_RGB666);
+								    pm);
 		if (!buf->priv.pal)
 		  {
 		     free(buf);
@@ -324,7 +324,8 @@ evas_software_xlib_outbuf_setup_x(int w, int h, int rot, Outbuf_Depth depth,
 		       buf->priv.x11.xlib.depth,
 		       buf->priv.mask.r,
 		       buf->priv.mask.g,
-		       buf->priv.mask.b, buf->priv.pal->colors);
+		       buf->priv.mask.b,
+		       buf->priv.pal ? buf->priv.pal->colors : -1);
 	     }
 	}
       evas_software_xlib_outbuf_drawable_set(buf, draw);
@@ -344,14 +345,12 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
 
    if ((buf->onebuf) && (buf->priv.x11.xlib.shm))
      {
-	Evas_Rectangle *rect;
+	Eina_Rectangle *rect;
 
-	rect = malloc(sizeof(Evas_Rectangle));
 	RECTS_CLIP_TO_RECT(x, y, w, h, 0, 0, buf->w, buf->h);
-	rect->x = x;
-	rect->y = y;
-	rect->w = w;
-	rect->h = h;
+	rect = eina_rectangle_new(x, y, w, h);
+	if (!rect) return NULL;
+
 	buf->priv.onebuf_regions = eina_list_append(buf->priv.onebuf_regions, rect);
 	if (buf->priv.onebuf)
 	  {
@@ -363,17 +362,6 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
 	       {
 		  XSync(buf->priv.x11.xlib.disp, False);
 		  buf->priv.synced = 1;
-	       }
-	     if ((buf->priv.x11.xlib.mask) || (buf->priv.destination_alpha))
-	       {
-		  int yy;
-
-		  im = buf->priv.onebuf;
-		  for (yy = y; yy < (y + h); yy++)
-		    {
-		       memset(im->image.data + (im->cache_entry.w * yy) + x,
-			      0, w * sizeof(DATA32));
-		    }
 	       }
 	     return buf->priv.onebuf;
 	  }
@@ -421,26 +409,38 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
              evas_cache_image_surface_alloc(&im->cache_entry, buf->w, buf->h);
 	     im->extended_info = obr;
 	     if ((buf->rot == 0) || (buf->rot == 180))
-	       obr->xob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
-								buf->priv.x11.xlib.vis,
-								buf->priv.x11.xlib.depth,
-								buf->w, buf->h,
-								use_shm,
-								NULL);
+               {
+                  obr->xob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
+                                                                    buf->priv.x11.xlib.vis,
+                                                                    buf->priv.x11.xlib.depth,
+                                                                    buf->w, buf->h,
+                                                                    use_shm,
+                                                                    NULL);
+                  if (buf->priv.x11.xlib.mask)
+                    obr->mxob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
+                                                                       buf->priv.x11.xlib.vis,
+                                                                       1, buf->w, buf->h,
+                                                                       use_shm,
+                                                                       NULL);
+               }
 	     else if ((buf->rot == 90) || (buf->rot == 270))
-	       obr->xob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
-								buf->priv.x11.xlib.vis,
-								buf->priv.x11.xlib.depth,
-								buf->h, buf->w,
-								use_shm,
-								NULL);
-	     if (buf->priv.x11.xlib.mask)
-	       obr->mxob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
-								 buf->priv.x11.xlib.vis,
-								 1, buf->w, buf->h,
-								 use_shm,
-								 NULL);
+               {
+                  obr->xob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
+                                                                    buf->priv.x11.xlib.vis,
+                                                                    buf->priv.x11.xlib.depth,
+                                                                    buf->h, buf->w,
+                                                                    use_shm,
+                                                                    NULL);
+                  if (buf->priv.x11.xlib.mask)
+                    obr->mxob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
+                                                                       buf->priv.x11.xlib.vis,
+                                                                       1, buf->h, buf->w,
+                                                                       use_shm,
+                                                                       NULL);
+               }
 	  }
+	/* FIXME: We should be able to remove this memset, but somewhere in the process
+	   we copy too much to the destination surface and some area are not cleaned before copy. */
 	if (alpha)
           /* FIXME: faster memset! */
           memset(im->image.data, 0, w * h * sizeof(DATA32));
@@ -511,12 +511,20 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
         evas_cache_image_surface_alloc(&im->cache_entry, w, h);
 	im->extended_info = obr;
 	if ((buf->rot == 0) || (buf->rot == 180))
-	  obr->xob = _find_xob(buf->priv.x11.xlib.disp,
-			       buf->priv.x11.xlib.vis,
-			       buf->priv.x11.xlib.depth,
-			       w, h,
-			       use_shm,
-			       NULL);
+          {
+             obr->xob = _find_xob(buf->priv.x11.xlib.disp,
+                                  buf->priv.x11.xlib.vis,
+                                  buf->priv.x11.xlib.depth,
+                                  w, h,
+                                  use_shm,
+                                  NULL);
+             if (buf->priv.x11.xlib.mask)
+               obr->mxob = _find_xob(buf->priv.x11.xlib.disp,
+                                     buf->priv.x11.xlib.vis,
+                                     1, w, h,
+                                     use_shm,
+                                     NULL);
+          }
 /*
 	  obr->xob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
 							   buf->priv.x11.xlib.vis,
@@ -526,12 +534,20 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
 							   NULL);
  */
 	else if ((buf->rot == 90) || (buf->rot == 270))
-	  obr->xob = _find_xob(buf->priv.x11.xlib.disp,
-			       buf->priv.x11.xlib.vis,
-			       buf->priv.x11.xlib.depth,
-			       h, w,
-			       use_shm,
-			       NULL);
+          {
+             obr->xob = _find_xob(buf->priv.x11.xlib.disp,
+                                  buf->priv.x11.xlib.vis,
+                                  buf->priv.x11.xlib.depth,
+                                  h, w,
+                                  use_shm,
+                                  NULL);
+             if (buf->priv.x11.xlib.mask)
+               obr->mxob = _find_xob(buf->priv.x11.xlib.disp,
+                                     buf->priv.x11.xlib.vis,
+                                     1, h, w,
+                                     use_shm,
+                                     NULL);
+          }
 /*
 	  obr->xob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
 							   buf->priv.x11.xlib.vis,
@@ -540,12 +556,14 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
 							   use_shm,
 							   NULL);
  */
+/*        
 	if (buf->priv.x11.xlib.mask)
 	  obr->mxob = _find_xob(buf->priv.x11.xlib.disp,
 				buf->priv.x11.xlib.vis,
 				1, w, h,
 				use_shm,
 				NULL);
+ */
 /*
 	  obr->mxob = evas_software_xlib_x_output_buffer_new(buf->priv.x11.xlib.disp,
 							    buf->priv.x11.xlib.vis,
@@ -554,6 +572,8 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
 							    NULL);
  */
      }
+   /* FIXME: We should be able to remove this memset, but somewhere in the process
+      we copy too much to the destination surface and some area are not cleaned before copy. */
    if ((buf->priv.x11.xlib.mask) || (buf->priv.destination_alpha))
      /* FIXME: faster memset! */
      memset(im->image.data, 0, w * h * sizeof(DATA32));
@@ -563,7 +583,7 @@ evas_software_xlib_outbuf_new_region_for_update(Outbuf *buf, int x, int y, int w
 }
 
 void
-evas_software_xlib_outbuf_free_region_for_update(Outbuf *buf, RGBA_Image *update)
+evas_software_xlib_outbuf_free_region_for_update(Outbuf *buf __UNUSED__, RGBA_Image *update __UNUSED__)
 {
    /* no need to do anything - they are cleaned up on flush */
 }
@@ -584,7 +604,7 @@ evas_software_xlib_outbuf_flush(Outbuf *buf)
 	tmpr = XCreateRegion();
 	while (buf->priv.onebuf_regions)
 	  {
-	     Evas_Rectangle *rect;
+	     Eina_Rectangle *rect;
 	     XRectangle xr;
 
 	     rect = buf->priv.onebuf_regions->data;
@@ -597,7 +617,7 @@ evas_software_xlib_outbuf_flush(Outbuf *buf)
 	     if (buf->priv.debug)
 	       evas_software_xlib_outbuf_debug_show(buf, buf->priv.x11.xlib.win,
 						   rect->x, rect->y, rect->w, rect->h);
-	     free(rect);
+	     eina_rectangle_free(rect);
 	  }
 	XSetRegion(buf->priv.x11.xlib.disp, buf->priv.x11.xlib.gc, tmpr);
 	evas_software_xlib_x_output_buffer_paste(obr->xob, buf->priv.x11.xlib.win,
@@ -741,7 +761,7 @@ evas_software_xlib_outbuf_push_updated_region(Outbuf *buf, RGBA_Image *update, i
    Outbuf_Region      *obr;
    DATA32             *src_data;
    void               *data;
-   int                 bpl = 0, yy;
+   int                 bpl = 0, xx, yy;
 
    obr = update->extended_info;
    if (buf->priv.pal)
@@ -842,10 +862,41 @@ evas_software_xlib_outbuf_push_updated_region(Outbuf *buf, RGBA_Image *update, i
 #endif
    if (obr->mxob)
      {
-	for (yy = 0; yy < obr->h; yy++)
-	  evas_software_xlib_x_write_mask_line(buf, obr->mxob,
-					      src_data +
-					      (yy * obr->w), obr->w, yy);
+        if (buf->rot == 0)
+          {
+             for (yy = 0; yy < obr->h; yy++)
+               evas_software_xlib_x_write_mask_line(buf, obr->mxob,
+                                                    src_data +
+                                                    (yy * obr->w), obr->w, yy);
+          }
+        else if (buf->rot == 90)
+          {
+             for (yy = 0; yy < obr->h; yy++)
+               evas_software_xlib_x_write_mask_line_vert(buf, obr->mxob,
+                                                         src_data + yy, 
+                                                         h,  // h
+                                                         obr->h - yy - 1, // ym
+                                                         w); // w
+          }
+        else if (buf->rot == 180)
+          {
+             for (yy = 0; yy < obr->h; yy++)
+               {
+                  evas_software_xlib_x_write_mask_line_rev(buf, obr->mxob,
+                                                           src_data +
+                                                           (yy * obr->w), 
+                                                           obr->w, obr->h - yy - 1);
+               }
+          }
+        else if (buf->rot == 270)
+          {
+             for (yy = 0; yy < obr->h; yy++)
+               evas_software_xlib_x_write_mask_line_vert_rev(buf, obr->mxob,
+                                                             src_data + yy,
+                                                             h,  // h
+                                                             yy, // ym
+                                                             w); // w
+          }
 #if 1
 #else
 	/* XX async push */
@@ -978,4 +1029,10 @@ evas_software_xlib_outbuf_debug_show(Outbuf * buf, Drawable draw, int x, int y, 
 //	  XDestroyImage(xim);
 	XSync(buf->priv.x11.xlib.disp, False);
      }
+}
+
+Eina_Bool
+evas_software_xlib_outbuf_alpha_get(Outbuf *buf)
+{
+   return buf->priv.x11.xlib.mask;
 }

@@ -280,29 +280,60 @@ m4_pushdef([UP], m4_toupper([[$1]]))
 m4_pushdef([DOWN], m4_tolower([[$1]]))
 
 want_loader="$2"
+want_static_loader="no"
+have_loader="no"
 have_evas_image_loader_[]DOWN="no"
 
 AC_ARG_ENABLE([image-loader-[]DOWN],
-   [AC_HELP_STRING([--disable-image-loader-[]DOWN], [disable $1 image loader])],
-   [want_loader=${enableval}]
+   [AC_HELP_STRING([--enable-image-loader-[]DOWN], [enable $1 image loader])],
+   [
+    if test "x${enableval}" = "xyes" ; then
+       want_loader="yes"
+    else
+       if test "x${enableval}" = "xstatic" ; then
+          want_loader="static"
+       else
+          want_loader="no"
+       fi
+    fi
+   ]
 )
 
 AC_MSG_CHECKING([whether to enable $1 image loader])
 AC_MSG_RESULT([${want_loader}])
 
-if test "x${want_loader}" = "xyes" -o "x${want_loader}" = "xauto"; then
-   m4_default([EVAS_CHECK_LOADER_DEP_]m4_defn([UP]))(DOWN, [have_evas_image_loader_[]DOWN="yes"], [have_evas_image_loader_[]DOWN="no"])
+if test "x${want_loader}" = "xyes" -o "x${want_loader}" = "xstatic" -o "x${want_loader}" = "xauto"; then
+   m4_default([EVAS_CHECK_LOADER_DEP_]m4_defn([UP]))(DOWN, [have_loader="yes"], [have_loader="no"])
 fi
 
-if test "x${have_evas_image_loader_[]DOWN}" = "xno" -a "x${want_loader}" = "xyes" -a "x${use_strict}" = "xyes" ; then
+if test "x${have_loader}" = "xno" -a "x${want_loader}" = "xyes" -a "x${use_strict}" = "xyes" ; then
    AC_MSG_ERROR([$1 dependencies not found (strict dependencies checking)])
 fi
 
-if test "x${have_evas_image_loader_[]DOWN}" = "xyes" ; then
+AC_MSG_CHECKING([whether $1 image loader will be built])
+AC_MSG_RESULT([${have_loader}])
+
+if test "x${have_loader}" = "xyes" ; then
+   if test "x${want_loader}" = "xstatic" ; then
+      have_evas_image_loader_[]DOWN="static"
+      want_static_loader="yes"
+   else
+      have_evas_image_loader_[]DOWN="yes"
+   fi
+fi
+
+if test "x${have_loader}" = "xyes" ; then
    AC_DEFINE(BUILD_LOADER_[]UP, [1], [UP Image Loader Support])
 fi
 
-AM_CONDITIONAL(BUILD_LOADER_[]UP, [test "x${have_evas_image_loader_[]DOWN}" = "xyes"])
+AM_CONDITIONAL(BUILD_LOADER_[]UP, [test "x${have_loader}" = "xyes"])
+
+if test "x${want_static_loader}" = "xyes" ; then
+   AC_DEFINE(EVAS_STATIC_BUILD_[]UP, [1], [Build $1 image loader inside libevas])
+   have_static_module="yes"
+fi
+
+AM_CONDITIONAL(EVAS_STATIC_BUILD_[]UP, [test "x${want_static_loader}" = "xyes"])
 
 m4_popdef([UP])
 m4_popdef([DOWN])
@@ -331,7 +362,7 @@ AC_MSG_CHECKING([whether to enable Eet font loader])
 AC_MSG_RESULT([${want_loader}])
 
 if test "x$want_loader" = "xyes" -o "x$want_loader" = "xauto"; then
-    PKG_CHECK_MODULES([EET], [eet >= 1.0.1], [have_evas_font_loader_eet="yes"], [have_evas_font_loader_eet="yes"])
+    PKG_CHECK_MODULES([EET], [eet >= 1.0.1], [have_evas_font_loader_eet="yes"], [have_evas_font_loader_eet="no"])
 fi
 
 if test "x${have_evas_font_loader_eet}" = "xno" -a "x$want_loader" = "xyes" -a "x$use_strict" = "xyes" ; then

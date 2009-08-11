@@ -127,7 +127,7 @@ evas_software_ddraw_init (HWND    window,
  release_surface_primary:
    buf->priv.dd.surface_primary->Release();
  release_clipper:
-   if (buf->priv.dd.fullscreen)
+   if (!buf->priv.dd.fullscreen)
      buf->priv.dd.clipper->Release();
  release_object:
    buf->priv.dd.object->Release();
@@ -146,7 +146,7 @@ evas_software_ddraw_shutdown(Outbuf *buf)
        buf->priv.dd.surface_back->Release();
    if (buf->priv.dd.surface_primary)
      buf->priv.dd.surface_primary->Release();
-   if (buf->priv.dd.fullscreen)
+   if (!buf->priv.dd.fullscreen)
      if (buf->priv.dd.clipper)
        buf->priv.dd.clipper->Release();
    if (buf->priv.dd.object)
@@ -185,7 +185,7 @@ evas_software_ddraw_lock(Outbuf *buf,
 
    if (FAILED(buf->priv.dd.surface_back->Lock(NULL,
                                               &surface_desc,
-                                              DDLOCK_WAIT | DDLOCK_SURFACEMEMORYPTR,
+                                              DDLOCK_WAIT | DDLOCK_WRITEONLY | DDLOCK_SURFACEMEMORYPTR | DDLOCK_NOSYSLOCK,
                                               NULL)))
      return NULL;
 

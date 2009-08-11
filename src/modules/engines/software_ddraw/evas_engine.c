@@ -105,7 +105,7 @@ eng_info_free(Evas *e, void *info)
    free(in);
 }
 
-static void
+static int
 eng_setup(Evas *e, void *in)
 {
    Render_Engine                   *re;
@@ -135,11 +135,13 @@ eng_setup(Evas *e, void *in)
                                                   info->info.fullscreen);
 	re->ob->onebuf = ponebuf;
      }
-   if (!e->engine.data.output) return;
+   if (!e->engine.data.output) return 0;
    if (!e->engine.data.context)
      e->engine.data.context = e->engine.func->context_new(e->engine.data.output);
 
    re = e->engine.data.output;
+
+   return 1;
 }
 
 static void
@@ -280,8 +282,10 @@ eng_output_redraws_next_update_push(void *data, void *surface, int x, int y, int
    Render_Engine *re;
 
    re = (Render_Engine *)data;
+#ifdef BUILD_PIPE_RENDER
    evas_common_pipe_begin(surface);
    evas_common_pipe_flush(surface);
+#endif   
    evas_software_ddraw_outbuf_push_updated_region(re->ob, surface, x, y, w, h);
    evas_software_ddraw_outbuf_free_region_for_update(re->ob, surface);
    evas_common_cpu_end_opt();
@@ -305,9 +309,14 @@ eng_output_idle_flush(void *data)
    evas_software_ddraw_outbuf_idle_flush(re->ob);
 }
 
+static Eina_Bool
+eng_canvas_alpha_get(void *data, void *context)
+{
+   return EINA_FALSE;
+}
 
 /* module advertising code */
-EAPI int
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -320,6 +329,7 @@ module_open(Evas_Module *em)
    ORD(info);
    ORD(info_free);
    ORD(setup);
+   ORD(canvas_alpha_get);
    ORD(output_free);
    ORD(output_resize);
    ORD(output_tile_size_set);
@@ -335,15 +345,24 @@ module_open(Evas_Module *em)
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
    EVAS_MODULE_API_VERSION,
-   EVAS_MODULE_TYPE_ENGINE,
    "software_ddraw",
-   "none"
+   "none",
+   {
+     module_open,
+     module_close
+   }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, software_ddraw);
+
+#ifndef EVAS_STATIC_BUILD_SOFTWARE_DDRAW
+EVAS_EINA_MODULE_DEFINE(engine, software_ddraw);
+#endif

@@ -24,7 +24,7 @@ static Evas_Func func, pfunc;
 
 static void *eng_info(Evas *e);
 static void  eng_info_free(Evas *e, void *info);
-static void  eng_setup(Evas *e, void *info);
+static int   eng_setup(Evas *e, void *info);
 static void  eng_output_free(void *data);
 static void  eng_output_resize(void *data, int width, int height);
 
@@ -88,7 +88,7 @@ eng_info_free(Evas *e, void *info)
    free(in);
 }
 
-static void
+static int
 eng_setup(Evas *e, void *info)
 {
    Render_Engine *re;
@@ -98,8 +98,12 @@ eng_setup(Evas *e, void *info)
    in = (Evas_Engine_Info_Direct3D *)info;
    if (e->engine.data.output == NULL)
      {
-     e->engine.data.output = _output_setup(e->output.w, e->output.h,
-        in->info.rotation, in->info.window, in->info.depth, in->info.fullscreen);
+        e->engine.data.output = _output_setup(e->output.w,
+                                              e->output.h,
+                                              in->info.rotation,
+                                              in->info.window,
+                                              in->info.depth,
+                                              in->info.fullscreen);
      }
    else if (in->info.fullscreen != 0)
    {
@@ -117,10 +121,11 @@ eng_setup(Evas *e, void *info)
    }
 
    if (e->engine.data.output == NULL)
-     return;
+     return 0;
    if (e->engine.data.context == NULL)
      e->engine.data.context = e->engine.func->context_new(e->engine.data.output);
 
+   return 1;
 }
 
 static void
@@ -371,6 +376,17 @@ eng_image_border_get(void *data, void *image, int *l, int *r, int *t, int *b)
 }
 
 static void
+eng_image_scale_hint_set(void *data __UNUSED__, void *image, int hint)
+{
+}
+
+static int
+eng_image_scale_hint_get(void *data __UNUSED__, void *image)
+{
+   return EVAS_IMAGE_SCALE_HINT_NONE;
+}
+
+static void
 eng_font_draw(void *data, void *context, void *surface, void *font, int x, int y, int w, int h, int ow, int oh, const char *text)
 {
    Render_Engine *re = (Render_Engine *)data;
@@ -511,7 +527,7 @@ eng_gradient2_radial_draw(void *data, void *context, void *surface, void *radial
 
 
 /* module advertising code */
-EAPI int
+static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
@@ -553,6 +569,10 @@ module_open(Evas_Module *em)
    ORD(image_border_get);
    ORD(font_draw);
    ORD(font_free);
+
+   ORD(image_scale_hint_set);
+   ORD(image_scale_hint_get);
+
 /*
    ORD(gradient2_color_np_stop_insert);
    ORD(gradient2_clear);
@@ -580,15 +600,24 @@ module_open(Evas_Module *em)
    return 1;
 }
 
-EAPI void
-module_close(void)
+static void
+module_close(Evas_Module *em)
 {
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
-   EVAS_MODULE_API_VERSION,
-   EVAS_MODULE_TYPE_ENGINE,
-   "direct3d",
-   "none"
+  EVAS_MODULE_API_VERSION,
+  "direct3d",
+  "none",
+  {
+    module_open,
+    module_close
+  }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, direct3d);
+
+#ifndef EVAS_STATIC_BUILD_DIRECT3D
+EVAS_EINA_MODULE_DEFINE(engine, direct3d);
+#endif

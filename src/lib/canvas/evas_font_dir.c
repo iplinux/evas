@@ -35,7 +35,7 @@ struct _Fndat
 };
 
 /* private methods for font dir cache */
-static Evas_Bool font_cache_dir_free(const Eina_Hash *hash, const void *key, void *data, void *fdata);
+static Eina_Bool font_cache_dir_free(const Eina_Hash *hash, const void *key, void *data, void *fdata);
 static Evas_Font_Dir *object_text_font_cache_dir_update(char *dir, Evas_Font_Dir *fd);
 static Evas_Font *object_text_font_cache_font_find_x(Evas_Font_Dir *fd, char *font);
 static Evas_Font *object_text_font_cache_font_find_file(Evas_Font_Dir *fd, char *font);
@@ -45,9 +45,17 @@ static Evas_Font_Dir *object_text_font_cache_dir_add(char *dir);
 static void object_text_font_cache_dir_del(char *dir, Evas_Font_Dir *fd);
 static int evas_object_text_font_string_parse(char *buffer, char dest[14][256]);
 
+#ifdef HAVE_FONTCONFIG
+static int fc_init = 0;
+#endif
+
 void
 evas_font_dir_cache_free(void)
 {
+#ifdef HAVE_FONTCONFIG
+   fc_init--;
+   if (fc_init == 0) FcFini();
+#endif   
    if (!font_dirs) return;
 
    eina_hash_foreach(font_dirs, font_cache_dir_free, NULL);
@@ -112,16 +120,34 @@ evas_fonts_zero_free(Evas *evas)
 {
    Fndat *fd;
 
-   while (fonts_zero)
+   EINA_LIST_FREE(fonts_zero, fd)
+     {
+	if (fd->name) eina_stringshare_del(fd->name);
+	if (fd->source) eina_stringshare_del(fd->source);
+	evas->engine.func->font_free(evas->engine.data.output, fd->font);
+	free(fd);
+     }
+}
+
+void
+evas_fonts_zero_presure(Evas *evas)
+{
+   Fndat *fd;
+
+   while (fonts_zero
+	  && eina_list_count(fonts_zero) > 4) /* 4 is arbitrary */
      {
 	fd = eina_list_data_get(fonts_zero);
+
+	if (fd->ref != 0) break;
+	fonts_zero = eina_list_remove_list(fonts_zero, fonts_zero);
 
 	if (fd->name) eina_stringshare_del(fd->name);
 	if (fd->source) eina_stringshare_del(fd->source);
 	evas->engine.func->font_free(evas->engine.data.output, fd->font);
 	free(fd);
 
-	fonts_zero = eina_list_remove_list(fonts_zero, fonts_zero);
+	if (eina_list_count(fonts_zero) < 5) break;
      }
 }
 
@@ -144,17 +170,37 @@ evas_font_free(Evas *evas, void *font)
 	     break;
 	  }
      }
-   while ((fonts_zero) &&
-	  (eina_list_count(fonts_zero) > 4)) /* 4 is arbitrary */
+   while (fonts_zero
+	  && eina_list_count(fonts_zero) > 42) /* 42 is arbitrary */
      {
 	fd = eina_list_data_get(fonts_zero);
+
 	if (fd->ref != 0) break;
 	fonts_zero = eina_list_remove_list(fonts_zero, fonts_zero);
+
 	if (fd->name) eina_stringshare_del(fd->name);
 	if (fd->source) eina_stringshare_del(fd->source);
 	evas->engine.func->font_free(evas->engine.data.output, fd->font);
 	free(fd);
+
+	if (eina_list_count(fonts_zero) < 43) break;
      }
+}
+
+static void
+evas_font_init(void)
+{
+   static int done = 0;
+   if (done) return;
+   done = 1;
+#ifdef HAVE_FONTCONFIG
+   fc_init++;
+   if (fc_init == 1)
+     {
+        FcInit();
+        FcConfigEnableHome(1);
+     }
+#endif   
 }
 
 void *
@@ -167,6 +213,8 @@ evas_font_load(Evas *evas, const char *name, const char *source, int size)
 
    if (!name) return NULL;
    if (name[0] == 0) return NULL;
+   
+   evas_font_init();
 
    EINA_LIST_FOREACH(fonts_cache, l, fd)
      {
@@ -409,6 +457,8 @@ evas_font_dir_available_list(const Evas *evas)
    FcObjectSet *os;
    int i;
 
+   evas_font_init();
+   
    p = FcPatternCreate();
    os = FcObjectSetBuild(FC_FAMILY, FC_STYLE, NULL);
 
@@ -468,7 +518,7 @@ evas_font_dir_available_list_free(Eina_List *available)
 
 /* private stuff */
 static Eina_Bool
-font_cache_dir_free(const Eina_Hash *hash, const void *key, void *data, void *fdata)
+font_cache_dir_free(const Eina_Hash *hash __UNUSED__, const void *key, void *data, void *fdata __UNUSED__)
 {
    object_text_font_cache_dir_del((char *) key, data);
    return 1;
@@ -747,7 +797,7 @@ object_text_font_cache_dir_add(char *dir)
 }
 
 static void
-object_text_font_cache_dir_del(char *dir, Evas_Font_Dir *fd)
+object_text_font_cache_dir_del(char *dir __UNUSED__, Evas_Font_Dir *fd)
 {
    if (fd->lookup) eina_hash_free(fd->lookup);
    while (fd->fonts)

@@ -1,26 +1,28 @@
 #ifndef EVAS_INLINE_H
 #define EVAS_INLINE_H
 
-static inline void
-evas_add_rect(Evas_Rectangles *rects, int x, int y, int w, int h)
+static inline int
+evas_object_was_visible(Evas_Object *obj)
 {
-   if ((rects->count + 1) > rects->total)
+   if (obj->smart.smart) return 0;
+   if ((obj->prev.visible) &&
+       (obj->prev.cache.clip.visible) &&
+       (obj->prev.cache.clip.a > 0))
      {
-	Evas_Rectangle *_add_rect;
-	unsigned int _tmp_total;
-
-	_tmp_total = rects->total + 32;
-	_add_rect = (Evas_Rectangle *)realloc(rects->array, sizeof(Evas_Rectangle) * _tmp_total);
-	if (!_add_rect) return ;
-
-	rects->total = _tmp_total;
-	rects->array = _add_rect;
+	if (obj->func->was_visible)
+	  return obj->func->was_visible(obj);
+	return 1;
      }
-   rects->array[rects->count].x = x;
-   rects->array[rects->count].y = y;
-   rects->array[rects->count].w = w;
-   rects->array[rects->count].h = h;
-   rects->count += 1;
+   return 0;
+}
+
+static inline void
+evas_add_rect(Eina_Array *rects, int x, int y, int w, int h)
+{
+   Eina_Rectangle *r;
+
+   NEW_RECT(r, x, y, w, h);
+   if (r) eina_array_push(rects, r);
 }
 
 static inline Cutout_Rect*
@@ -157,7 +159,8 @@ evas_object_clip_recalc(Evas_Object *obj)
    int nx, ny, nw, nh, nvis, nr, ng, nb, na;
 
    if (obj->layer->evas->events_frozen > 0) return;
-//   if (!obj->cur.clipper->cur.cache.clip.dirty) return;
+   if (!(obj->cur.clipper == NULL || obj->cur.clipper->cur.cache.clip.dirty)
+       && !obj->cur.cache.clip.dirty) return;
    evas_object_coords_recalc(obj);
    cx = obj->cur.geometry.x; cy = obj->cur.geometry.y;
    cw = obj->cur.geometry.w; ch = obj->cur.geometry.h;
@@ -170,7 +173,7 @@ evas_object_clip_recalc(Evas_Object *obj)
    if (obj->cur.clipper)
      {
 // this causes problems... hmmm
-//	if (obj->cur.clipper->cur.cache.clip.dirty)
+	if (obj->cur.clipper->cur.cache.clip.dirty)
 	  evas_object_clip_recalc(obj->cur.clipper);
 	nx = obj->cur.clipper->cur.cache.clip.x;
 	ny = obj->cur.clipper->cur.cache.clip.y;

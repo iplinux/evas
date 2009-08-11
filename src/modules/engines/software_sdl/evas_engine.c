@@ -64,7 +64,7 @@ static const Evas_Cache_Engine_Image_Func       _sdl_cache_engine_image_cb = {
 
 /* SDL engine info function */
 static void*
-evas_engine_sdl_info		(Evas* e)
+evas_engine_sdl_info		(Evas* e __UNUSED__)
 {
    Evas_Engine_Info_SDL*	info = calloc(1, sizeof (Evas_Engine_Info_SDL));
 
@@ -77,7 +77,7 @@ evas_engine_sdl_info		(Evas* e)
 }
 
 static void
-evas_engine_sdl_info_free	(Evas* e, void* info)
+evas_engine_sdl_info_free	(Evas* e __UNUSED__, void* info)
 {
    Evas_Engine_Info_SDL*	in = (Evas_Engine_Info_SDL*) info;
 
@@ -86,21 +86,22 @@ evas_engine_sdl_info_free	(Evas* e, void* info)
 }
 
 /* SDL engine output manipulation function */
-static void
+static int
 evas_engine_sdl_setup		(Evas* e, void* in)
 {
    Evas_Engine_Info_SDL*	info = (Evas_Engine_Info_SDL*) in;
 
    /* if we arent set to sdl, why the hell do we get called?! */
    if (evas_output_method_get(e) != evas_render_method_lookup("software_sdl"))
-      return ;
+      return 0;
 
    SDL_Init(SDL_INIT_NOPARACHUTE);
 
    if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0)
      {
 	fprintf(stderr, "SDL_Init failed with %s\n", SDL_GetError());
-        exit(-1);
+        SDL_Quit();
+        return 0;
      }
 
    /* lets just set up */
@@ -111,10 +112,12 @@ evas_engine_sdl_setup		(Evas* e, void* in)
                                              info->info.hwsurface);
 
    if (!e->engine.data.output)
-      return;
+      return 0;
 
    e->engine.func = &func;
    e->engine.data.context = e->engine.func->context_new(e->engine.data.output);
+
+   return 1;
 }
 
 static void
@@ -252,14 +255,12 @@ evas_engine_sdl_output_redraws_next_update_get	(void *data,
    rect.w = *w;
    rect.h = *h;
 
-   SDL_FillRect(re->rgba_engine_image->surface, &rect, 0);
-
    /* Return the "fake" surface so it is passed to the drawing routines. */
    return re->rgba_engine_image;
 }
 
 static void
-evas_engine_sdl_output_redraws_next_update_push	(void *data, void *surface,
+evas_engine_sdl_output_redraws_next_update_push	(void *data, void *surface __UNUSED__,
 						 int x, int y, int w, int h)
 {
    Render_Engine				*re = (Render_Engine *) data;
@@ -326,7 +327,7 @@ evas_engine_sdl_image_load(void *data, const char *file, const char *key, int *e
 }
 
 static int
-evas_engine_sdl_image_alpha_get(void *data, void *image)
+evas_engine_sdl_image_alpha_get(void *data __UNUSED__, void *image)
 {
    SDL_Engine_Image_Entry       *eim = image;
    RGBA_Image                   *im;
@@ -344,7 +345,7 @@ evas_engine_sdl_image_alpha_get(void *data, void *image)
 }
 
 static void
-evas_engine_sdl_image_size_get(void *data, void *image, int *w, int *h)
+evas_engine_sdl_image_size_get(void *data __UNUSED__, void *image, int *w, int *h)
 {
    SDL_Engine_Image_Entry       *eim;
 
@@ -354,7 +355,7 @@ evas_engine_sdl_image_size_get(void *data, void *image, int *w, int *h)
 }
 
 static int
-evas_engine_sdl_image_colorspace_get(void *data, void *image)
+evas_engine_sdl_image_colorspace_get(void *data __UNUSED__, void *image)
 {
    SDL_Engine_Image_Entry       *eim = image;
 
@@ -363,7 +364,7 @@ evas_engine_sdl_image_colorspace_get(void *data, void *image)
 }
 
 static void
-evas_engine_sdl_image_colorspace_set(void *data, void *image, int cspace)
+evas_engine_sdl_image_colorspace_set(void *data __UNUSED__, void *image, int cspace)
 {
    SDL_Engine_Image_Entry       *eim = image;
 
@@ -503,7 +504,7 @@ evas_engine_sdl_image_data_put(void *data, void *image, DATA32* image_data)
 }
 
 static void
-evas_engine_sdl_image_data_preload_request(void *data, void *image, const void *target)
+evas_engine_sdl_image_data_preload_request(void *data __UNUSED__, void *image, const void *target)
 {
    SDL_Engine_Image_Entry       *eim = image;
    RGBA_Image                   *im;
@@ -515,7 +516,7 @@ evas_engine_sdl_image_data_preload_request(void *data, void *image, const void *
 }
 
 static void
-evas_engine_sdl_image_data_preload_cancel(void *data, void *image)
+evas_engine_sdl_image_data_preload_cancel(void *data __UNUSED__, void *image, const void *target)
 {
    SDL_Engine_Image_Entry       *eim = image;
    RGBA_Image                   *im;
@@ -523,7 +524,7 @@ evas_engine_sdl_image_data_preload_cancel(void *data, void *image)
    if (!eim) return ;
    im = (RGBA_Image*) eim->cache_entry.src;
    if (!im) return ;
-   evas_cache_image_preload_cancel(&im->cache_entry);
+   evas_cache_image_preload_cancel(&im->cache_entry, target);
 }
 
 static void*
@@ -552,13 +553,13 @@ evas_engine_sdl_image_alpha_set(void *data, void *image, int has_alpha)
 }
 
 static void*
-evas_engine_sdl_image_border_set(void *data, void *image, int l, int r, int t, int b)
+evas_engine_sdl_image_border_set(void *data __UNUSED__, void *image, int l __UNUSED__, int r __UNUSED__, int t __UNUSED__, int b __UNUSED__)
 {
    return image;
 }
 
 static void
-evas_engine_sdl_image_border_get(void *data, void *image, int *l, int *r, int *t, int *b)
+evas_engine_sdl_image_border_get(void *data __UNUSED__, void *image __UNUSED__, int *l __UNUSED__, int *r __UNUSED__, int *t __UNUSED__, int *b __UNUSED__)
 {
    /* FIXME: need to know what evas expect from this call */
 }
@@ -619,6 +620,17 @@ evas_engine_sdl_image_draw(void *data, void *context, void *surface, void *image
 }
 
 static void
+evas_engine_sdl_image_scale_hint_set(void *data __UNUSED__, void *image, int hint)
+{
+}
+
+static int
+evas_engine_sdl_image_scale_hint_get(void *data __UNUSED__, void *image)
+{
+   return EVAS_IMAGE_SCALE_HINT_NONE;
+}
+
+static void
 evas_engine_sdl_image_cache_flush(void *data)
 {
    Render_Engine        *re = (Render_Engine*) data;
@@ -646,7 +658,7 @@ evas_engine_sdl_image_cache_get(void *data)
 }
 
 static char*
-evas_engine_sdl_image_comment_get(void *data, void *image, char *key)
+evas_engine_sdl_image_comment_get(void *data __UNUSED__, void *image, char *key __UNUSED__)
 {
    SDL_Engine_Image_Entry       *eim = image;
    RGBA_Image                   *im;
@@ -658,14 +670,14 @@ evas_engine_sdl_image_comment_get(void *data, void *image, char *key)
 }
 
 static char*
-evas_engine_sdl_image_format_get(void *data, void *image)
+evas_engine_sdl_image_format_get(void *data __UNUSED__, void *image __UNUSED__)
 {
    /* FIXME: need to know what evas expect from this call */
    return NULL;
 }
 
 static void
-evas_engine_sdl_font_draw(void *data, void *context, void *surface, void *font, int x, int y, int w, int h, int ow, int oh, const char *text)
+evas_engine_sdl_font_draw(void *data __UNUSED__, void *context, void *surface, void *font, int x, int y, int w __UNUSED__, int h __UNUSED__, int ow __UNUSED__, int oh __UNUSED__, const char *text)
 {
    SDL_Engine_Image_Entry       *eim = surface;
    int                           mustlock_im = 0;
@@ -685,7 +697,7 @@ evas_engine_sdl_font_draw(void *data, void *context, void *surface, void *font, 
 }
 
 static void
-evas_engine_sdl_line_draw(void *data, void *context, void *surface, int x1, int y1, int x2, int y2)
+evas_engine_sdl_line_draw(void *data __UNUSED__, void *context, void *surface, int x1, int y1, int x2, int y2)
 {
    SDL_Engine_Image_Entry       *eim = surface;
    int                           mustlock_im = 0;
@@ -705,7 +717,7 @@ evas_engine_sdl_line_draw(void *data, void *context, void *surface, int x1, int 
 }
 
 static void
-evas_engine_sdl_rectangle_draw(void *data, void *context, void *surface, int x, int y, int w, int h)
+evas_engine_sdl_rectangle_draw(void *data __UNUSED__, void *context, void *surface, int x, int y, int w, int h)
 {
    SDL_Engine_Image_Entry       *eim = surface;
 #if ENGINE_SDL_PRIMITIVE
@@ -764,7 +776,7 @@ evas_engine_sdl_rectangle_draw(void *data, void *context, void *surface, int x, 
 }
 
 static void
-evas_engine_sdl_polygon_draw(void *data, void *context, void *surface, void *polygon)
+evas_engine_sdl_polygon_draw(void *data __UNUSED__, void *context, void *surface, void *polygon)
 {
    SDL_Engine_Image_Entry       *eim = surface;
    int                           mustlock_im = 0;
@@ -784,7 +796,7 @@ evas_engine_sdl_polygon_draw(void *data, void *context, void *surface, void *pol
 }
 
 static void
-evas_engine_sdl_gradient_draw(void *data, void *context, void *surface, void *gradient, int x, int y, int w, int h)
+evas_engine_sdl_gradient_draw(void *data __UNUSED__, void *context, void *surface, void *gradient, int x, int y, int w, int h)
 {
    SDL_Engine_Image_Entry       *eim = surface;
    int                           mustlock_im = 0;
@@ -803,7 +815,7 @@ evas_engine_sdl_gradient_draw(void *data, void *context, void *surface, void *gr
      SDL_UnlockSurface(eim->surface);
 }
 
-EAPI int module_open(Evas_Module *em)
+static int module_open(Evas_Module *em)
 {
    if (!em) return 0;
    /* get whatever engine module we inherit from */
@@ -853,23 +865,36 @@ EAPI int module_open(Evas_Module *em)
    ORD(rectangle_draw);
    ORD(polygon_draw);
    ORD(gradient_draw);
+   
+   ORD(image_scale_hint_set);
+   ORD(image_scale_hint_get);
+   
    /* now advertise out own api */
    em->functions = (void *)(&func);
    return 1;
 }
 
-EAPI void module_close(void)
+static void module_close(Evas_Module *em)
 {
 
 }
 
-EAPI Evas_Module_Api evas_modapi =
+static Evas_Module_Api evas_modapi =
 {
-   EVAS_MODULE_API_VERSION,
-   EVAS_MODULE_TYPE_ENGINE,
-   "software_sdl",
-   "none"
+  EVAS_MODULE_API_VERSION,
+  "software_sdl",
+  "none",
+  {
+    module_open,
+    module_close
+  }
 };
+
+EVAS_MODULE_DEFINE(EVAS_MODULE_TYPE_ENGINE, engine, software_sdl);
+
+#ifndef EVAS_STATIC_BUILD_SOFTWARE_SDL
+EVAS_EINA_MODULE_DEFINE(engine, software_sdl);
+#endif
 
 /* Private routines. */
 
@@ -956,7 +981,7 @@ _sdl_image_delete(Engine_Image_Entry *eim)
 }
 
 static int
-_sdl_image_constructor(Engine_Image_Entry *ie, void *data)
+_sdl_image_constructor(Engine_Image_Entry *ie, void *data __UNUSED__)
 {
    SDL_Surface                  *sdl = NULL;
    SDL_Engine_Image_Entry       *eim = (SDL_Engine_Image_Entry *) ie;
@@ -994,7 +1019,7 @@ _sdl_image_destructor(Engine_Image_Entry *eie)
 }
 
 static int
-_sdl_image_dirty(Engine_Image_Entry *dst, const Engine_Image_Entry *src)
+_sdl_image_dirty(Engine_Image_Entry *dst, const Engine_Image_Entry *src __UNUSED__)
 {
    SDL_Engine_Image_Entry       *eim = (SDL_Engine_Image_Entry *) dst;
    SDL_Surface                  *sdl = NULL;
@@ -1053,7 +1078,7 @@ _sdl_image_update_data(Engine_Image_Entry *dst, void* engine_data)
 }
 
 static int
-_sdl_image_size_set(Engine_Image_Entry *dst, const Engine_Image_Entry *src)
+_sdl_image_size_set(Engine_Image_Entry *dst, const Engine_Image_Entry *src __UNUSED__)
 {
    SDL_Engine_Image_Entry       *eim = (SDL_Engine_Image_Entry *) dst;
    SDL_Surface                  *sdl;

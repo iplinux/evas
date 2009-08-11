@@ -1,18 +1,17 @@
-This package was debianized by Falko Schmidt <falko@alphagemini.org> on
-Fri,  4 Apr 2008 12:37:17 +0000.
+This package was debianized by Debian Pkg-e Team <pkg-e-devel@lists.alioth.debian.org> 
+Sat, 07 Jul 2007 09:29:10 +0000.
 
-The source code is from the e17/libs/evas module of the enlightenment CVS
-tree. For more information, see:
+It was downloaded from http://download.enlightenment.org/
 
-  http://www.enlightenment.org
+Upstream Authors: 
 
-Upstream Authors
-
-        Enlightenment team <enlightenment-devel@lists.sourceforge.net>
+	Enlightenment team <enlightenment-devel@lists.sourceforge.net>
 
 Copyright:
 
-        Copyright (C) 2000 Carsten Haitzler and various contributors (see AUTHORS)
+  	Copyright (C) 2000 Carsten Haitzler and various contributors (see AUTHORS)
+    src/modules/engines/fb/evas_fb.h: Copyright (c) 1999 - Carsten Haitzler
+    src/modules/engines/fb/evas_fb_main.c: Copyright (c) 1999 - Carsten Haitzler
 
 License:
 
@@ -37,7 +36,3 @@ License:
 
 On Debian systems, the complete text of the BSD License can be found
 in `/usr/share/common-licenses/BSD'.
-
-The Debian packaging is:
-  (C) 2006 2007,Debian Pkg-e Team <pkg-e-devel@lists.alioth.debian.org>
-  and is licensed under the GPL, see `/usr/share/common-licenses/GPL'.

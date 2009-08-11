@@ -50,14 +50,14 @@ struct _Evas_Object_Box_Accessor
        return val;							\
     }
 
-static Evas_Smart_Class _parent_sc = {NULL};
+static Evas_Smart_Class _parent_sc = EVAS_SMART_CLASS_INIT_NULL;
 
 static Eina_Bool
 _evas_object_box_iterator_next(Evas_Object_Box_Iterator *it, void **data)
 {
    Evas_Object_Box_Option *opt;
 
-   if (!eina_iterator_next(it->real_iterator, &opt))
+   if (!eina_iterator_next(it->real_iterator, (void **)&opt))
      return EINA_FALSE;
    if (data) *data = opt->obj;
    return EINA_TRUE;
@@ -81,7 +81,7 @@ _evas_object_box_accessor_get_at(Evas_Object_Box_Accessor *it, unsigned int inde
 {
    Evas_Object_Box_Option *opt;
 
-   if (!eina_accessor_data_get(it->real_accessor, index, &opt))
+   if (!eina_accessor_data_get(it->real_accessor, index, (void *)&opt))
      return EINA_FALSE;
    if (data) *data = opt->obj;
    return EINA_TRUE;
@@ -101,14 +101,14 @@ _evas_object_box_accessor_free(Evas_Object_Box_Accessor *it)
 }
 
 static void
-_on_child_resize(void *data, Evas *evas, Evas_Object *o, void *einfo)
+_on_child_resize(void *data, Evas *evas __UNUSED__, Evas_Object *o __UNUSED__, void *einfo __UNUSED__)
 {
    Evas_Object *box = data;
    evas_object_smart_changed(box);
 }
 
 static void
-_on_child_del(void *data, Evas *evas, Evas_Object *o, void *einfo)
+_on_child_del(void *data, Evas *evas __UNUSED__, Evas_Object *o, void *einfo __UNUSED__)
 {
    const Evas_Object_Box_Api *api;
    Evas_Object *box = data;
@@ -124,10 +124,11 @@ _on_child_del(void *data, Evas *evas, Evas_Object *o, void *einfo)
 
    if (!api->remove(box, priv, o))
      fputs("child removal failed\n", stderr);
+   evas_object_smart_changed(box);
 }
 
 static void
-_on_child_hints_changed(void *data, Evas *evas, Evas_Object *o, void *einfo)
+_on_child_hints_changed(void *data, Evas *evas __UNUSED__, Evas_Object *o __UNUSED__, void *einfo __UNUSED__)
 {
    Evas_Object *box = data;
    evas_object_smart_changed(box);
@@ -193,7 +194,7 @@ _evas_object_box_option_callbacks_register(Evas_Object *o, Evas_Object_Box_Data 
 }
 
 static Evas_Object_Box_Option *
-_evas_object_box_option_new_default(Evas_Object *o, Evas_Object_Box_Data *priv, Evas_Object *child)
+_evas_object_box_option_new_default(Evas_Object *o __UNUSED__, Evas_Object_Box_Data *priv __UNUSED__, Evas_Object *child)
 {
    Evas_Object_Box_Option *opt;
 
@@ -207,7 +208,7 @@ _evas_object_box_option_new_default(Evas_Object *o, Evas_Object_Box_Data *priv, 
 }
 
 static void
-_evas_object_box_option_free_default(Evas_Object *o, Evas_Object_Box_Data *priv, Evas_Object_Box_Option *opt)
+_evas_object_box_option_free_default(Evas_Object *o __UNUSED__, Evas_Object_Box_Data *priv __UNUSED__, Evas_Object_Box_Option *opt)
 {
    free(opt);
 }
@@ -269,7 +270,7 @@ static Evas_Object_Box_Option *
 _evas_object_box_insert_at_default(Evas_Object *o, Evas_Object_Box_Data *priv, Evas_Object *child, unsigned int pos)
 {
    Eina_List *l;
-   int i;
+   unsigned int i;
 
    if ((pos == 0) && (eina_list_count(priv->children) == 0))
      {
@@ -435,8 +436,11 @@ _evas_object_box_smart_del(Evas_Object *o)
 }
 
 static void
-_evas_object_box_smart_resize(Evas_Object *o, int w, int h)
+_evas_object_box_smart_resize(Evas_Object *o, Evas_Coord w, Evas_Coord h)
 {
+   Evas_Coord ow, oh;
+   evas_object_geometry_get(o, NULL, NULL, &ow, &oh);
+   if ((ow == w) && (oh == h)) return;
    evas_object_smart_changed(o);
 }
 
@@ -453,9 +457,7 @@ _evas_object_box_smart_calculate(Evas_Object *o)
 static Evas_Smart *
 _evas_object_box_smart_class_new(void)
 {
-   static Evas_Object_Box_Api api = {
-     {"Evas_Object_Box", EVAS_SMART_CLASS_VERSION},
-   };
+   static Evas_Object_Box_Api api = EVAS_OBJECT_BOX_API_INIT_NAME_VERSION("Evas_Object_Box");
 
    if (!_parent_sc.name)
      evas_object_box_smart_set(&api);
@@ -550,6 +552,9 @@ void
 evas_object_box_layout_set(Evas_Object *o, Evas_Object_Box_Layout cb, const void *data, void (*free_data)(void *data))
 {
    EVAS_OBJECT_BOX_DATA_GET_OR_RETURN(o, priv);
+
+   if ((priv->layout.cb == cb) && (priv->layout.data == data) && (priv->layout.free_data == free_data))
+     return;
 
    if (priv->layout.data && priv->layout.free_data)
      priv->layout.free_data(priv->layout.data);
@@ -731,7 +736,7 @@ _evas_object_box_layout_horizontal_weight_apply(Evas_Object_Box_Data *priv, Evas
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int pad_inc = 0, sub_pixel = 0;
    int req_w, global_pad, remaining, top_h = 0;
@@ -790,7 +795,7 @@ evas_object_box_layout_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, vo
    else
      { /* justified */
         _fixed_point_divide_and_decompose_integer
-	  (remaining, n_children - 1, &global_pad, &pad_inc);
+            (remaining, n_children - 1, &global_pad, &pad_inc);
         global_pad += priv->pad.h;
      }
 
@@ -894,7 +899,7 @@ _evas_object_box_layout_vertical_weight_apply(Evas_Object_Box_Data *priv, Evas_O
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int pad_inc = 0, sub_pixel = 0;
    int req_h, global_pad, remaining, top_w = 0;
@@ -1028,7 +1033,7 @@ evas_object_box_layout_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_homogeneous_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_homogeneous_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int cell_sz, share, inc;
    int sub_pixel = 0;
@@ -1097,7 +1102,7 @@ evas_object_box_layout_homogeneous_horizontal(Evas_Object *o, Evas_Object_Box_Da
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_homogeneous_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_homogeneous_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int cell_sz, share, inc;
    int sub_pixel = 0;
@@ -1198,7 +1203,7 @@ evas_object_box_layout_homogeneous_vertical(Evas_Object *o, Evas_Object_Box_Data
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_homogeneous_max_size_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_homogeneous_max_size_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int remaining, global_pad, pad_inc = 0, sub_pixel = 0;
    int cell_sz = 0;
@@ -1291,7 +1296,7 @@ evas_object_box_layout_homogeneous_max_size_horizontal(Evas_Object *o, Evas_Obje
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_homogeneous_max_size_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_homogeneous_max_size_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int remaining, global_pad, pad_inc = 0, sub_pixel = 0;
    int cell_sz = 0;
@@ -1373,7 +1378,7 @@ evas_object_box_layout_homogeneous_max_size_vertical(Evas_Object *o, Evas_Object
 }
 
 static void
-_evas_object_box_layout_flow_horizontal_row_info_collect(Evas_Object_Box_Data *priv, int box_w, int n_children, int *row_count, int *row_max_h, int *row_break, int *row_width, int *off_y_ret, int *max_h_ret)
+_evas_object_box_layout_flow_horizontal_row_info_collect(Evas_Object_Box_Data *priv, int box_w, int *row_count, int *row_max_h, int *row_break, int *row_width, int *off_y_ret, int *max_h_ret)
 {
    int i, remain_w = box_w, start_i = 0;
    int off_y = 0, max_h = 0, n_rows = 0;
@@ -1476,10 +1481,11 @@ _evas_object_box_layout_flow_horizontal_row_info_collect(Evas_Object_Box_Data *p
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_flow_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_flow_horizontal(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    int n_children, v_justify;
    int r, row_count = 0;
+   int min_w = 0, min_h = 0;
    int max_h, inc_y;
    int remain_y, i;
    int x, y, w, h;
@@ -1500,19 +1506,21 @@ evas_object_box_layout_flow_horizontal(Evas_Object *o, Evas_Object_Box_Data *pri
    evas_object_geometry_get(o, &x, &y, &w, &h);
 
    _evas_object_box_layout_flow_horizontal_row_info_collect
-     (priv, w, n_children, &row_count, row_max_h, row_break, row_width,
-      &off_y, &max_h);
+     (priv, w, &row_count, row_max_h, row_break, row_width, &off_y, &max_h);
 
    inc_y = 0;
    v_justify = 0;
    remain_y = h - (off_y + max_h);
 
-   if (priv->align.v >= 0.0)
-     inc_y = priv->align.v * remain_y;
-   else if (row_count == 0)
-     y += remain_y / 2;
-   else /* y-justified */
-     inc_y = remain_y / row_count;
+   if (remain_y > 0)
+     {
+	if (priv->align.v >= 0.0)
+	  inc_y = priv->align.v * remain_y;
+	else if (row_count == 0)
+	  y += remain_y / 2;
+	else /* y-justified */
+	  inc_y = remain_y / row_count;
+     }
 
    for (i = 0, r = 0, l = priv->children; r <= row_count; r++)
      {
@@ -1566,15 +1574,17 @@ evas_object_box_layout_flow_horizontal(Evas_Object *o, Evas_Object_Box_Data *pri
 	  }
 
         evas_object_geometry_get(o, &x, NULL, NULL, NULL);
+        if (min_w < row_width[r])
+            min_w = row_width[r];
+        min_h += row_max_h[r];
         y += row_max_h[r] + inc_y;
      }
 
-   //TODO set size hints
-   //evas_object_size_hint_min_set(o, x, y);
+   evas_object_size_hint_min_set(o, min_w, min_h);
 }
 
 static void
-_evas_object_box_layout_flow_vertical_col_info_collect(Evas_Object_Box_Data *priv, int box_h, int n_children, int *col_count, int *col_max_w, int *col_break, int *col_height, int *off_x_ret, int *max_w_ret)
+_evas_object_box_layout_flow_vertical_col_info_collect(Evas_Object_Box_Data *priv, int box_h, int *col_count, int *col_max_w, int *col_break, int *col_height, int *off_x_ret, int *max_w_ret)
 {
    int i, remain_h = box_h, start_i = 0;
    int off_x = 0, max_w = 0, n_cols = 0;
@@ -1651,10 +1661,11 @@ _evas_object_box_layout_flow_vertical_col_info_collect(Evas_Object_Box_Data *pri
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_flow_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_flow_vertical(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
-   int n_children, h_justify;
+   int n_children;
    int c, col_count;
+   int min_w = 0, min_h = 0;
    int max_w, inc_x;
    int remain_x, i;
    int x, y, w, h;
@@ -1675,19 +1686,20 @@ evas_object_box_layout_flow_vertical(Evas_Object *o, Evas_Object_Box_Data *priv,
    evas_object_geometry_get(o, &x, &y, &w, &h);
 
    _evas_object_box_layout_flow_vertical_col_info_collect
-     (priv, h, n_children, &col_count, col_max_w, col_break, col_height,
-      &off_x, &max_w);
+     (priv, h, &col_count, col_max_w, col_break, col_height, &off_x, &max_w);
 
    inc_x = 0;
-   h_justify = 0;
    remain_x = w - (off_x + max_w);
 
-   if (priv->align.h >= 0)
-     inc_x = priv->align.h * remain_x;
-   else if (col_count == 0)
-     x += remain_x / 2;
-   else /* x-justified */
-     inc_x = remain_x / col_count;
+   if (remain_x > 0)
+     {
+	if (priv->align.h >= 0)
+	  inc_x = priv->align.h * remain_x;
+	else if (col_count == 0)
+	  x += remain_x / 2;
+	else /* x-justified */
+	  inc_x = remain_x / col_count;
+     }
 
    for (i = 0, c = 0, l = priv->children; c <= col_count; c++)
      {
@@ -1741,11 +1753,13 @@ evas_object_box_layout_flow_vertical(Evas_Object *o, Evas_Object_Box_Data *priv,
 	  }
 
         evas_object_geometry_get(o, NULL, &y, NULL, NULL);
+        min_w += col_max_w[c];
+        if (min_h < col_height[c])
+            min_h = col_height[c];
         x += col_max_w[c] + inc_x;
      }
 
-   //TODO set size hints
-   //evas_object_size_hint_min_set(o, w,h);
+   evas_object_size_hint_min_set(o, min_w, min_h);
 }
 
 /**
@@ -1772,7 +1786,7 @@ evas_object_box_layout_flow_vertical(Evas_Object *o, Evas_Object_Box_Data *priv,
  * @todo consider aspect hint and respect it.
  */
 void
-evas_object_box_layout_stack(Evas_Object *o, Evas_Object_Box_Data *priv, void *data)
+evas_object_box_layout_stack(Evas_Object *o, Evas_Object_Box_Data *priv, void *data __UNUSED__)
 {
    Eina_List *l;
    Evas_Coord ox, oy, ow, oh;
@@ -2008,15 +2022,14 @@ evas_object_box_insert_at(Evas_Object *o, Evas_Object *child, unsigned int pos)
  * Remove an object @a child from the box @a o. On error, @c 0 is
  * returned.
  */
-Evas_Bool
+Eina_Bool
 evas_object_box_remove(Evas_Object *o, Evas_Object *child)
 {
    const Evas_Object_Box_Api *api;
    Evas_Object *obj;
 
    EVAS_OBJECT_BOX_DATA_GET_OR_RETURN_VAL(o, priv, 0);
-   if (!child)
-     return 0;
+   if (!child) return EINA_FALSE;
 
    api = priv->api;
    if ((!api) || (!api->remove))
@@ -2029,29 +2042,25 @@ evas_object_box_remove(Evas_Object *o, Evas_Object *child)
         _evas_object_box_child_callbacks_unregister(obj);
         evas_object_smart_member_del(obj);
         evas_object_smart_changed(o);
-        return 1;
+        return EINA_TRUE;
      }
 
-   return 0;
+   return EINA_FALSE;
 }
 
 /**
  * Remove an object from the box @a o which occupies position @a
  * pos. On error, @c 0 is returned.
  */
-Evas_Bool
+Eina_Bool
 evas_object_box_remove_at(Evas_Object *o, unsigned int pos)
 {
    const Evas_Object_Box_Api *api;
    Evas_Object *obj;
 
    EVAS_OBJECT_BOX_DATA_GET_OR_RETURN_VAL(o, priv, 0);
-   if (pos < 0)
-     return 0;
-
    api = priv->api;
-   if ((!api) || (!api->remove_at))
-     return 0;
+   if ((!api) || (!api->remove_at)) return EINA_FALSE;
 
    obj = api->remove_at(o, priv, pos);
 
@@ -2060,26 +2069,27 @@ evas_object_box_remove_at(Evas_Object *o, unsigned int pos)
         _evas_object_box_child_callbacks_unregister(obj);
         evas_object_smart_member_del(obj);
         evas_object_smart_changed(o);
-        return 1;
+        return EINA_TRUE;
      }
 
-   return 0;
+   return EINA_FALSE;
 }
 
 /**
  * Remove all child objects.
  * @return 0 on errors
  */
-Evas_Bool
-evas_object_box_remove_all(Evas_Object *o, Evas_Bool clear)
+Eina_Bool
+evas_object_box_remove_all(Evas_Object *o, Eina_Bool clear)
 {
    const Evas_Object_Box_Api *api;
 
    EVAS_OBJECT_BOX_DATA_GET_OR_RETURN_VAL(o, priv, 0);
 
    api = priv->api;
-   if ((!api) || (!api->remove))
-     return 0;
+   if ((!api) || (!api->remove)) return EINA_FALSE;
+
+   evas_object_smart_changed(o);
 
    while (priv->children)
      {
@@ -2094,11 +2104,10 @@ evas_object_box_remove_all(Evas_Object *o, Evas_Bool clear)
              if (clear)
                evas_object_del(obj);
           }
-        else return 0;
+        else return EINA_FALSE;
      }
 
-   evas_object_smart_changed(o);
-   return 1;
+   return EINA_TRUE;
 }
 
 /**
@@ -2227,10 +2236,10 @@ evas_object_box_option_property_id_get(Evas_Object *o, const char *name)
  * must be the last arguments and their type *must* match that of the
  * property itself. On error, @c 0 is returned.
  */
-Evas_Bool
+Eina_Bool
 evas_object_box_option_property_set(Evas_Object *o, Evas_Object_Box_Option *opt, int property, ...)
 {
-   Evas_Bool ret;
+   Eina_Bool ret;
    va_list args;
 
    va_start(args, property);
@@ -2248,24 +2257,23 @@ evas_object_box_option_property_set(Evas_Object *o, Evas_Object_Box_Option *opt,
  * is returned.
  */
 
-Evas_Bool
+Eina_Bool
 evas_object_box_option_property_vset(Evas_Object *o, Evas_Object_Box_Option *opt, int property, va_list args)
 {
    EVAS_OBJECT_BOX_DATA_GET_OR_RETURN_VAL(o, priv, 0);
    const Evas_Object_Box_Api *api;
 
-   if (!opt)
-     return 0;
+   if (!opt) return EINA_FALSE;
 
    api = priv->api;
    if ((!api) || (!api->property_set))
-     return 0;
+     return EINA_FALSE;
 
    if (!api->property_set(o, opt, property, args))
-     return 0;
+     return EINA_FALSE;
 
    evas_object_smart_changed(o);
-   return 1;
+   return EINA_TRUE;
 }
 
 /**
@@ -2274,10 +2282,10 @@ evas_object_box_option_property_vset(Evas_Object *o, Evas_Object_Box_Option *opt
  * be addresses of variables with the same type of that property. On
  * error, @c 0 is returned.
  */
-Evas_Bool
+Eina_Bool
 evas_object_box_option_property_get(Evas_Object *o, Evas_Object_Box_Option *opt, int property, ...)
 {
-   Evas_Bool ret;
+   Eina_Bool ret;
    va_list args;
 
    va_start(args, property);
@@ -2293,18 +2301,17 @@ evas_object_box_option_property_get(Evas_Object *o, Evas_Object_Box_Option *opt,
  * va_list @a args is initialized with must be addresses of variables
  * with the same type of that property. On error, @c 0 is returned.
  */
-Evas_Bool
+Eina_Bool
 evas_object_box_option_property_vget(Evas_Object *o, Evas_Object_Box_Option *opt, int property, va_list args)
 {
    EVAS_OBJECT_BOX_DATA_GET_OR_RETURN_VAL(o, priv, 0);
    const Evas_Object_Box_Api *api;
 
-   if (!opt)
-     return 0;
+   if (!opt) return EINA_FALSE;
 
    api = priv->api;
    if ((!api) || (!api->property_get))
-     return 0;
+     return EINA_FALSE;
 
    return api->property_get(o, opt, property, args);
 }

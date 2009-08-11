@@ -6,10 +6,11 @@
 #include "evas_convert_color.h"
 
 
-EAPI void
+EAPI DATA32
 evas_common_convert_argb_premul(DATA32 *data, unsigned int len)
 {
-   DATA32  *de = data + len;
+   DATA32 *de = data + len;
+   DATA32 nas = 0;
 
    while (data < de)
      {
@@ -19,7 +20,12 @@ evas_common_convert_argb_premul(DATA32 *data, unsigned int len)
 	  (((((*data) >> 8) & 0xff) * a) & 0xff00) +
 	  (((((*data) & 0x00ff00ff) * a) >> 8) & 0x00ff00ff);
 	data++;
+
+	if ((a == 1) || (a == 256))
+	  nas++;
      }
+
+   return nas;
 }
 
 EAPI void
@@ -127,7 +133,7 @@ evas_common_convert_color_rgb_to_hsv(int r, int g, int b, float *h, float *s, fl
    d = max - min;
 
    if (v) *v = (max / 255.0);
-   if (!max)
+   if (!max || !d)
      {
 	if (s) *s = 0;
         if (h) *h = 0;

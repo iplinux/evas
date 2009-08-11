@@ -57,6 +57,8 @@ static const Evas_Object_Func object_func =
      NULL,
      NULL,
      NULL,
+     NULL,
+     NULL,
      NULL
 };
 
@@ -151,10 +153,7 @@ evas_object_rectangle_free(Evas_Object *obj)
 static void
 evas_object_rectangle_render(Evas_Object *obj, void *output, void *context, void *surface, int x, int y)
 {
-   Evas_Object_Rectangle *o;
-
    /* render object to surface with context, and offxet by x,y */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    obj->layer->evas->engine.func->context_color_set(output,
 						    context,
 						    obj->cur.cache.clip.r,
@@ -181,8 +180,6 @@ evas_object_rectangle_render(Evas_Object *obj, void *output, void *context, void
 static void
 evas_object_rectangle_render_pre(Evas_Object *obj)
 {
-   Evas_Rectangles rects = { 0, 0, NULL };
-   Evas_Object_Rectangle *o;
    int is_v, was_v;
 
    /* dont pre-render the obj twice! */
@@ -193,7 +190,6 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
    /* elsewhere, decoding video etc. */
    /* then when this is done the object needs to figure if it changed and */
    /* if so what and where and add the appropriate redraw rectangles */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    /* if someone is clipping this obj - go calculate the clipper */
    if (obj->cur.clipper)
      {
@@ -207,23 +203,23 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
    was_v = evas_object_was_visible(obj);
    if (is_v != was_v)
      {
-	evas_object_render_pre_visible_change(&rects, obj, is_v, was_v);
+	evas_object_render_pre_visible_change(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 	goto done;
      }
    /* it's not visible - we accounted for it appearing or not so just abort */
    if (!is_v) goto done;
    /* clipper changed this is in addition to anything else for obj */
-   evas_object_render_pre_clipper_change(&rects, obj);
+   evas_object_render_pre_clipper_change(&obj->layer->evas->clip_changes, obj);
    /* if we restacked (layer or just within a layer) and don't clip anyone */
    if ((obj->restack) && (!obj->clip.clipees))
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed render op */
    if (obj->cur.render_op != obj->prev.render_op)
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed color */
@@ -232,7 +228,7 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
        (obj->cur.color.b != obj->prev.color.b) ||
        (obj->cur.color.a != obj->prev.color.a))
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed geometry - and obviously not visibility or color */
@@ -243,7 +239,7 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
        (obj->cur.geometry.w != obj->prev.geometry.w) ||
        (obj->cur.geometry.h != obj->prev.geometry.h))
      {
-	evas_rects_return_difference_rects(&rects,
+	evas_rects_return_difference_rects(&obj->layer->evas->clip_changes,
 					   obj->cur.geometry.x,
 					   obj->cur.geometry.y,
 					   obj->cur.geometry.w,
@@ -276,27 +272,18 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
 							    obj->cur.cache.clip.h);
   */
    done:
-   evas_object_render_pre_effect_updates(&rects, obj, is_v, was_v);
+   evas_object_render_pre_effect_updates(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 }
 
 static void
 evas_object_rectangle_render_post(Evas_Object *obj)
 {
-   Evas_Object_Rectangle *o;
 
    /* this moves the current data to the previous state parts of the object */
    /* in whatever way is safest for the object. also if we don't need object */
    /* data anymore we can free it if the object deems this is a good idea */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    /* remove those pesky changes */
-   while (obj->clip.changes)
-     {
-	Evas_Rectangle *r;
-
-	r = (Evas_Rectangle *)obj->clip.changes->data;
-	obj->clip.changes = eina_list_remove(obj->clip.changes, r);
-	free(r);
-     }
+   evas_object_clip_changes_clean(obj);
    /* move cur to prev safely for object data */
    obj->prev = obj->cur;
 }
@@ -304,11 +291,8 @@ evas_object_rectangle_render_post(Evas_Object *obj)
 static int
 evas_object_rectangle_is_opaque(Evas_Object *obj)
 {
-   Evas_Object_Rectangle *o;
-
    /* this returns 1 if the internal object data implies that the object is */
    /* currently fully opaque over the entire rectangle it occupies */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    if (obj->cur.render_op == EVAS_RENDER_COPY)
 	return 1;
    if (obj->cur.render_op != EVAS_RENDER_BLEND)
@@ -319,11 +303,8 @@ evas_object_rectangle_is_opaque(Evas_Object *obj)
 static int
 evas_object_rectangle_was_opaque(Evas_Object *obj)
 {
-   Evas_Object_Rectangle *o;
-
    /* this returns 1 if the internal object data implies that the object was */
    /* previously fully opaque over the entire rectangle it occupies */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    if (obj->prev.render_op == EVAS_RENDER_COPY)
 	return 1;
    if (obj->prev.render_op != EVAS_RENDER_BLEND)
@@ -378,46 +359,34 @@ evas_object_rectangle_unstore(Evas_Object *obj)
 static int
 evas_object_rectangle_is_visible(Evas_Object *obj)
 {
-   Evas_Object_Rectangle *o;
-
    /* this returns 1 if the internal object data would imply that it is */
    /* visible (ie drawing it draws something. this is not to do with events */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    return 1;
 }
 
 static int
 evas_object_rectangle_was_visible(Evas_Object *obj)
 {
-   Evas_Object_Rectangle *o;
-
    /* this returns 1 if the internal object data would imply that it was */
    /* visible (ie drawing it draws something. this is not to do with events */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    return 1;
 }
 
 static int
 evas_object_rectangle_is_inside(Evas_Object *obj, double x, double y)
 {
-   Evas_Object_Rectangle *o;
-
    /* this returns 1 if the canvas co-ordinates are inside the object based */
    /* on object private data. not much use for rects, but for polys, images */
    /* and other complex objects it might be */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    return 1;
 }
 
 static int
 evas_object_rectangle_was_inside(Evas_Object *obj, double x, double y)
 {
-   Evas_Object_Rectangle *o;
-
    /* this returns 1 if the canvas co-ordinates were inside the object based */
    /* on object private data. not much use for rects, but for polys, images */
    /* and other complex objects it might be */
-   o = (Evas_Object_Rectangle *)(obj->object_data);
    return 1;
 }
 #endif

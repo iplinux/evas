@@ -299,7 +299,7 @@ evas_software_xcb_outbuf_setup_x(int               w,
 		   evas_software_xcb_x_color_allocate(conn,
 						      cmap,
 						      vis,
-						      PAL_MODE_RGB666);
+						      pm);
 		if (!buf->priv.pal)
 		  {
 		     free(buf);
@@ -366,7 +366,7 @@ evas_software_xcb_outbuf_setup_x(int               w,
 		       buf->priv.mask.r,
 		       buf->priv.mask.g,
 		       buf->priv.mask.b,
-		       buf->priv.pal->colors);
+		       buf->priv.pal ? buf->priv.pal->colors : -1);
 	     }
 	}
       evas_software_xcb_outbuf_drawable_set(buf, draw);
@@ -395,14 +395,12 @@ evas_software_xcb_outbuf_new_region_for_update(Outbuf *buf,
 
    if ((buf->onebuf) && (buf->priv.x11.xcb.shm))
      {
-	Evas_Rectangle *rect;
+	Eina_Rectangle *rect;
 
-	rect = malloc(sizeof(Evas_Rectangle));
 	RECTS_CLIP_TO_RECT(x, y, w, h, 0, 0, buf->w, buf->h);
-	rect->x = x;
-	rect->y = y;
-	rect->w = w;
-	rect->h = h;
+	rect = eina_rectangle_new(x, y, w, h);
+	if (!rect) return NULL;
+
 	buf->priv.onebuf_regions = eina_list_append(buf->priv.onebuf_regions, rect);
 	if (buf->priv.onebuf)
 	  {
@@ -415,17 +413,6 @@ evas_software_xcb_outbuf_new_region_for_update(Outbuf *buf,
                   /* we sync */
                   free(xcb_get_input_focus_reply(buf->priv.x11.xcb.conn, xcb_get_input_focus_unchecked(buf->priv.x11.xcb.conn), NULL));
 		  buf->priv.synced = 1;
-	       }
-	     if ((buf->priv.x11.xcb.mask) || (buf->priv.destination_alpha))
-	       {
-		  int yy;
-
-		  im = buf->priv.onebuf;
-		  for (yy = y; yy < (y + h); yy++)
-		    {
-		       memset(im->image.data + (im->cache_entry.w * yy) + x,
-			      0, w * sizeof(DATA32));
-		    }
 	       }
 	     return buf->priv.onebuf;
 	  }
@@ -594,8 +581,8 @@ evas_software_xcb_outbuf_new_region_for_update(Outbuf *buf,
 }
 
 void
-evas_software_xcb_outbuf_free_region_for_update(Outbuf     *buf,
-						RGBA_Image *update)
+evas_software_xcb_outbuf_free_region_for_update(Outbuf     *buf __UNUSED__,
+						RGBA_Image *update __UNUSED__)
 {
    /* no need to do anything - they are cleaned up on flush */
 }
@@ -617,7 +604,7 @@ evas_software_xcb_outbuf_flush(Outbuf *buf)
         pixman_region_init(&tmpr);
 	while (buf->priv.onebuf_regions)
 	  {
-	     Evas_Rectangle *rect;
+	     Eina_Rectangle *rect;
 
 	     rect = buf->priv.onebuf_regions->data;
 	     buf->priv.onebuf_regions = eina_list_remove_list(buf->priv.onebuf_regions, buf->priv.onebuf_regions);
@@ -627,7 +614,7 @@ evas_software_xcb_outbuf_flush(Outbuf *buf)
 	     if (buf->priv.debug)
 	       evas_software_xcb_outbuf_debug_show(buf, buf->priv.x11.xcb.win,
 						   rect->x, rect->y, rect->w, rect->h);
-	     free(rect);
+	     eina_rectangle_free(rect);
 	  }
         xcb_set_clip_rectangles(buf->priv.x11.xcb.conn, XCB_CLIP_ORDERING_YX_BANDED,
                                 buf->priv.x11.xcb.gc,
@@ -1050,4 +1037,10 @@ evas_software_xcb_outbuf_debug_show(Outbuf        *buf,
         /* we sync */
         free(xcb_get_input_focus_reply(buf->priv.x11.xcb.conn, xcb_get_input_focus_unchecked(buf->priv.x11.xcb.conn), NULL));
      }
+}
+
+Eina_Bool
+evas_software_xcb_outbuf_alpha_get (Outbuf *buf)
+{
+   return buf->priv.x11.xcb.mask;
 }

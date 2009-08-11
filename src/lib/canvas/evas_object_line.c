@@ -63,6 +63,8 @@ static const Evas_Object_Func object_func =
      evas_object_line_is_inside,
      evas_object_line_was_inside,
      evas_object_line_coords_recalc,
+     NULL,
+     NULL,
      NULL
 };
 
@@ -163,6 +165,7 @@ evas_object_line_xy_set(Evas_Object *obj, Evas_Coord x1, Evas_Coord y1, Evas_Coo
    o->changed = 1;
    evas_object_change(obj);
    evas_object_coords_recalc(obj);
+   evas_object_clip_dirty(obj);
    if (obj->layer->evas->events_frozen <= 0)
      {
 	is = evas_object_is_in_output_rect(obj,
@@ -311,7 +314,6 @@ evas_object_line_render(Evas_Object *obj, void *output, void *context, void *sur
 static void
 evas_object_line_render_pre(Evas_Object *obj)
 {
-   Evas_Rectangles rects = { 0, 0, NULL };
    Evas_Object_Line *o;
    int is_v, was_v;
 
@@ -337,29 +339,29 @@ evas_object_line_render_pre(Evas_Object *obj)
    was_v = evas_object_was_visible(obj);
    if (is_v != was_v)
      {
-	evas_object_render_pre_visible_change(&rects, obj, is_v, was_v);
+	evas_object_render_pre_visible_change(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 	goto done;
      }
    /* it's not visible - we accounted for it appearing or not so just abort */
    if (!is_v) goto done;
    /* clipper changed this is in addition to anything else for obj */
-   evas_object_render_pre_clipper_change(&rects, obj);
+   evas_object_render_pre_clipper_change(&obj->layer->evas->clip_changes, obj);
    /* if we restacked (layer or just within a layer) */
    if (obj->restack)
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed anti_alias */
    if (obj->cur.anti_alias != obj->prev.anti_alias)
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed render op */
    if (obj->cur.render_op != obj->prev.render_op)
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed color */
@@ -368,7 +370,7 @@ evas_object_line_render_pre(Evas_Object *obj)
        (obj->cur.color.b != obj->prev.color.b) ||
        (obj->cur.color.a != obj->prev.color.a))
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    /* if it changed geometry - and obviously not visibility or color */
@@ -385,11 +387,11 @@ evas_object_line_render_pre(Evas_Object *obj)
 	 (o->cur.y2 != o->prev.y2)))
        )
      {
-	evas_object_render_pre_prev_cur_add(&rects, obj);
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
 	goto done;
      }
    done:
-   evas_object_render_pre_effect_updates(&rects, obj, is_v, was_v);
+   evas_object_render_pre_effect_updates(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 }
 
 static void
@@ -402,14 +404,7 @@ evas_object_line_render_post(Evas_Object *obj)
    /* data anymore we can free it if the object deems this is a good idea */
    o = (Evas_Object_Line *)(obj->object_data);
    /* remove those pesky changes */
-   while (obj->clip.changes)
-     {
-	Evas_Rectangle *r;
-
-	r = (Evas_Rectangle *)obj->clip.changes->data;
-	obj->clip.changes = eina_list_remove(obj->clip.changes, r);
-	free(r);
-     }
+   evas_object_clip_changes_clean(obj);
    /* move cur to prev safely for object data */
    obj->prev = obj->cur;
    o->prev = o->cur;
@@ -446,51 +441,35 @@ static void *evas_object_line_engine_data_get(Evas_Object *obj)
 static int
 evas_object_line_is_opaque(Evas_Object *obj)
 {
-   Evas_Object_Line *o;
-
    /* this returns 1 if the internal object data implies that the object is */
    /* currently fully opaque over the entire line it occupies */
-   o = (Evas_Object_Line *)(obj->object_data);
    return 0;
 }
 
 static int
 evas_object_line_was_opaque(Evas_Object *obj)
 {
-   Evas_Object_Line *o;
-
    /* this returns 1 if the internal object data implies that the object was */
    /* previously fully opaque over the entire line it occupies */
-   o = (Evas_Object_Line *)(obj->object_data);
    return 0;
 }
 
 static int
-evas_object_line_is_inside(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
+evas_object_line_is_inside(Evas_Object *obj, Evas_Coord x __UNUSED__, Evas_Coord y __UNUSED__)
 {
-   Evas_Object_Line *o;
-
    /* this returns 1 if the canvas co-ordinates are inside the object based */
    /* on object private data. not much use for rects, but for polys, images */
    /* and other complex objects it might be */
-   o = (Evas_Object_Line *)(obj->object_data);
    return 1;
-   x = 0;
-   y = 0;
 }
 
 static int
-evas_object_line_was_inside(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
+evas_object_line_was_inside(Evas_Object *obj, Evas_Coord x __UNUSED__, Evas_Coord y __UNUSED__)
 {
-   Evas_Object_Line *o;
-
    /* this returns 1 if the canvas co-ordinates were inside the object based */
    /* on object private data. not much use for rects, but for polys, images */
    /* and other complex objects it might be */
-   o = (Evas_Object_Line *)(obj->object_data);
    return 1;
-   x = 0;
-   y = 0;
 }
 
 static void
