@@ -1,3 +1,9 @@
+evas (0.9.9.062-2) asimov; urgency=low
+
+  * Remove obsolete patches.
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Tue, 18 Aug 2009 00:56:04 +0700
+
 evas (0.9.9.062-1) asimov; urgency=low
 
   * svn-03 snapshot
