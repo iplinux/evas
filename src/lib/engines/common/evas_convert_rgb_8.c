@@ -75,12 +75,10 @@ void evas_common_convert_rgba_to_8bpp_rgb_666_dith     (DATA32 *src, DATA8 *dst,
    r = p_to_6[(R_VAL(src_ptr))];
    g = p_to_6[(G_VAL(src_ptr))];
    b = p_to_6[(B_VAL(src_ptr))];
-   if(0) {
-	dith = DM_TABLE[(x + dith_x) & DM_MSK][(y + dith_y) & DM_MSK];
-	if ((p_to_6_err[(R_VAL(src_ptr))] >= dith ) && (r < 5)) r++;
-	if ((p_to_6_err[(G_VAL(src_ptr))] >= dith ) && (g < 5)) g++;
-	if ((p_to_6_err[(B_VAL(src_ptr))] >= dith ) && (b < 5)) b++;
-   }
+   dith = DM_TABLE[(x + dith_x) & DM_MSK][(y + dith_y) & DM_MSK];
+   if ((p_to_6_err[(R_VAL(src_ptr))] >= dith ) && (r < 5)) r++;
+   if ((p_to_6_err[(G_VAL(src_ptr))] >= dith ) && (g < 5)) g++;
+   if ((p_to_6_err[(B_VAL(src_ptr))] >= dith ) && (b < 5)) b++;
 
    *dst_ptr = pal[(r * 36) + (g * 6) + (b)];
 

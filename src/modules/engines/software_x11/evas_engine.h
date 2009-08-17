@@ -96,12 +96,8 @@ struct _Outbuf
 };
 
 
-#ifdef BUILD_ENGINE_SOFTWARE_X11
 void evas_software_xlib_x_init (void);
-#endif
-#ifdef BUILD_ENGINE_SOFTWARE_XCB
 void evas_software_xcb_x_init  (void);
-#endif
 
 
 #endif

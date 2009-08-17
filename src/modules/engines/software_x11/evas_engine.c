@@ -368,7 +368,6 @@ eng_setup(Evas *e, void *in)
 #ifdef BUILD_ENGINE_SOFTWARE_XLIB
         if (info->info.backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
           {
-#ifdef BUILD_ENGINE_SOFTWARE_X11
              re = _output_xlib_setup(e->output.w,
                                      e->output.h,
                                      info->info.rotation,
@@ -439,7 +438,6 @@ eng_setup(Evas *e, void *in)
 #ifdef BUILD_ENGINE_SOFTWARE_XLIB
         if (info->info.backend == EVAS_ENGINE_INFO_SOFTWARE_X11_BACKEND_XLIB)
           {
-#ifdef BUILD_ENGINE_SOFTWARE_X11
              evas_software_xlib_outbuf_free(re->ob);
              re->ob = evas_software_xlib_outbuf_setup_x(e->output.w,
                                                         e->output.h,
@@ -456,7 +454,6 @@ eng_setup(Evas *e, void *in)
                                                         info->info.shape_dither,
                                                         info->info.destination_alpha);
              evas_software_xlib_outbuf_debug_set(re->ob, info->info.debug);
-#endif
           }
 #endif
 
