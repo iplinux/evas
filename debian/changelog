@@ -1,3 +1,10 @@
+evas (0.9.9.062-4) asimov; urgency=low
+
+  * Do not try to call free(3) on segment allocated by shmget(3) in XCB
+    engine.
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Wed, 28 Oct 2009 05:05:28 +0600
+
 evas (0.9.9.062-3) asimov; urgency=low
 
   * Remove try_shm = 0 hack. Should increase speed a bit.
