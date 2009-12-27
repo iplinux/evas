@@ -2,6 +2,8 @@
  * vim:ts=8:sw=3:sts=8:noexpandtab:cino=>5n-3f0^-2{2
  */
 
+// THIS IS DEPRECATED. WILL GO EVENTUALLTY. NO NEED TO SUPPORT ANYMORE
+
 #include "evas_common.h"
 
 #ifdef BUILD_PIPE_RENDER
@@ -73,7 +75,7 @@ evas_common_pipe_thread(void *data)
 {
    Thinfo *thinfo;
 
-//   printf("TH [...........\n");
+//   INF("TH [...........");
    thinfo = data;
    for (;;)
      {
@@ -81,13 +83,13 @@ evas_common_pipe_thread(void *data)
 	RGBA_Pipe *p;
 
 	/* wait for start signal */
-//	printf(" TH %i START...\n", thinfo->thread_num);
+//	INF(" TH %i START...", thinfo->thread_num);
 	pthread_barrier_wait(&(thinfo->barrier[0]));
 	info = thinfo->info;
 //	if (info)
 //	  {
 //	     thinfo->info = NULL;
-//	     printf(" TH %i GO\n", thinfo->thread_num);
+//	     INF(" TH %i GO", thinfo->thread_num);
 	EINA_INLIST_FOREACH(EINA_INLIST_GET(info->im->pipe), p)
 	       {
 		  int i;
@@ -100,7 +102,7 @@ evas_common_pipe_thread(void *data)
 	       }
 	     free(info);
 //	  }
-//	printf(" TH %i DONE\n", thinfo->thread_num);
+//	INF(" TH %i DONE", thinfo->thread_num);
 	/* send finished signal */
 	pthread_barrier_wait(&(thinfo->barrier[1]));
      }
@@ -126,7 +128,7 @@ evas_common_pipe_begin(RGBA_Image *im)
      {
 	int cpunum;
 
-	cpunum = evas_common_cpu_count();
+	cpunum = eina_cpu_count();
 	thread_num = cpunum;
 	if (thread_num == 1) return;
 	pthread_barrier_init(&(thbarrier[0]), NULL, thread_num + 1);

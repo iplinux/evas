@@ -59,6 +59,7 @@ static const Evas_Object_Func object_func =
      NULL,
      NULL,
      NULL,
+     NULL,
      NULL
 };
 
@@ -101,7 +102,7 @@ evas_object_smart_data_set(Evas_Object *obj, void *data)
  * Retrieve user data stored on a smart object.
  *
  * @param obj The smart object
- * @return A pointer to data stored using evas_object_smart_data_set(), or 
+ * @return A pointer to data stored using evas_object_smart_data_set(), or
  *         NULL if none has been set.
  * @ingroup Evas_Smart_Object_Group
  */
@@ -148,7 +149,7 @@ evas_object_smart_smart_get(const Evas_Object *obj)
  * @param obj The member object
  * @param smart_obj The smart object
  *
- * Members will automatically be stacked and layered with the smart object. 
+ * Members will automatically be stacked and layered with the smart object.
  * The various stacking function will operate on members relative to the
  * other members instead of the entire canvas.
  *
@@ -174,26 +175,32 @@ evas_object_smart_member_add(Evas_Object *obj, Evas_Object *smart_obj)
 
    if (obj->delete_me)
      {
-	printf("EVAS ERROR: Adding deleted object %p to smart obj %p\n", obj, smart_obj);
+        CRIT("Adding deleted object %p to smart obj %p", obj, smart_obj);
 	abort();
 	return;
      }
    if (smart_obj->delete_me)
      {
-	printf("EVAS ERROR: Adding object %p to deleted smart obj %p\n", obj, smart_obj);
+	CRIT("Adding object %p to deleted smart obj %p", obj, smart_obj);
+	abort();
+	return;
+     }
+   if (!smart_obj->layer)
+     {
+	CRIT("No evas surface associated with smart object (%p)", smart_obj);
 	abort();
 	return;
      }
    if (obj->layer && smart_obj->layer
        && obj->layer->evas != smart_obj->layer->evas)
      {
-	printf("EVAS ERROR: Adding object %p from Evas (%p) from another Evas (%p)\n", obj, obj->layer->evas, smart_obj->layer->evas);
+	CRIT("Adding object %p from Evas (%p) from another Evas (%p)", obj, obj->layer->evas, smart_obj->layer->evas);
 	abort();
 	return;
      }
 
    if (obj->smart.parent == smart_obj) return;
-   
+
    if (obj->smart.parent) evas_object_smart_member_del(obj);
 
    evas_object_release(obj, 1);
@@ -259,7 +266,7 @@ evas_object_smart_parent_get(const Evas_Object *obj)
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
    return NULL;
    MAGIC_CHECK_END();
-   
+
    return obj->smart.parent;
 }
 
@@ -275,7 +282,7 @@ evas_object_smart_members_get(const Evas_Object *obj)
    Evas_Object_Smart *o;
    Eina_List *members;
    Eina_Inlist *member;
-   
+
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
    return NULL;
    MAGIC_CHECK_END();
@@ -287,7 +294,7 @@ evas_object_smart_members_get(const Evas_Object *obj)
    members = NULL;
    for (member = o->contained; member; member = member->next)
       members = eina_list_append(members, member);
-   
+
    return members;
 }
 
@@ -426,6 +433,7 @@ evas_object_smart_callback_call(Evas_Object *obj, const char *event, void *event
    Evas_Object_Smart *o;
    Eina_List *l;
    Evas_Smart_Callback *cb;
+   const char *strshare;
 
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
    return;
@@ -437,16 +445,18 @@ evas_object_smart_callback_call(Evas_Object *obj, const char *event, void *event
    if (!event) return;
    if (obj->delete_me) return;
    o->walking_list++;
+   strshare = eina_stringshare_add(event);
    EINA_LIST_FOREACH(o->callbacks, l, cb)
      {
 	if (!cb->delete_me)
 	  {
-	     if (!strcmp(cb->event, event))
+	     if (cb->event == strshare)
 	       cb->func(cb->func_data, obj, event_info);
 	  }
 	if (obj->delete_me)
 	  break;
      }
+   eina_stringshare_del(strshare);
    o->walking_list--;
    evas_object_smart_callbacks_clear(obj);
 }
@@ -535,7 +545,6 @@ evas_object_smart_need_recalculate_get(const Evas_Object *obj)
  * Call user provided calculate() and unset need_calculate.
  *
  * @param obj the smart object
- * @return if flag is set or not.
  *
  * @ingroup Evas_Smart_Object_Group
  */
@@ -556,6 +565,22 @@ evas_object_smart_calculate(Evas_Object *obj)
 
    o->need_recalculate = 0;
    obj->smart.smart->smart_class->calculate(obj);
+}
+
+/**
+ * Call user provided calculate() and unset need_calculate on all objects.
+ *
+ * @param e The canvas to calculate all objects in
+ *
+ * @ingroup Evas_Smart_Object_Group
+ */
+EAPI void
+evas_smart_objects_calculate(Evas *e)
+{
+   MAGIC_CHECK(e, Evas, MAGIC_EVAS);
+   return;
+   MAGIC_CHECK_END();
+   evas_call_smarts_calculate(e);
 }
 
 /**
@@ -692,7 +717,7 @@ evas_object_smart_member_cache_invalidate(Evas_Object *obj)
    for (l = o->contained; l; l = l->next)
      {
 	Evas_Object *obj2;
-	
+
 	obj2 = (Evas_Object *)l;
 	evas_object_smart_member_cache_invalidate(obj2);
      }
@@ -794,6 +819,13 @@ static void
 evas_object_smart_render_pre(Evas_Object *obj)
 {
    if (obj->pre_render_done) return;
+   if ((obj->cur.map != obj->prev.map) ||
+       (obj->cur.usemap != obj->prev.usemap))
+     {
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
+        goto done;
+     }
+   done:
    obj->pre_render_done = 1;
 }
 

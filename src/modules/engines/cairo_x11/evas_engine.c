@@ -8,6 +8,9 @@
 #include "Evas_Engine_Cairo_X11.h"
 #include "evas_cairo_common.h"
 
+/* domain for eina_log */
+int _evas_engine_cairo_X11_log_dom = -1;
+
 static void *eng_info(Evas *e);
 static void eng_info_free(Evas *e, void *info);
 static int eng_setup(Evas *e, void *info);
@@ -121,6 +124,8 @@ static int eng_font_cache_get(void *data);
 
 static void eng_font_hinting_set(void *data, void *font, int hinting);
 static int eng_font_hinting_can_hint(void *data, int hinting);
+
+static int eng_font_last_up_to_pos(void *data __UNUSED__, void *font, const char *text, int x, int y);
 
 typedef struct _Render_Engine Render_Engine;
 
@@ -246,18 +251,22 @@ static Evas_Func eng_func =
      eng_font_hinting_can_hint,
      
      eng_image_scale_hint_set,
-     eng_image_scale_hint_get
+     eng_image_scale_hint_get,
+     /* more font draw functions */
+     eng_font_last_up_to_pos,
+     NULL, // image_map4_draw
+     NULL, // image_map_surface_new
+     NULL // image_map_surface_free
 };
 
 static void *
 eng_info(Evas *e)
 {
    Evas_Engine_Info_Cairo_X11 *info;
-
+   INF("CAIRO: create info...");
    info = calloc(1, sizeof(Evas_Engine_Info_Cairo_X11));
    if (!info) return NULL;
-   info->magic.magic = rand();
-   printf("CAIRO: create info...\n");
+   info->magic.magic = rand();   
    return info;
    e = NULL;
 }
@@ -266,7 +275,6 @@ static void
 eng_info_free(Evas *e, void *info)
 {
    Evas_Engine_Info_Cairo_X11 *in;
-
    in = (Evas_Engine_Info_Cairo_X11 *)info;
    free(in);
 }
@@ -278,7 +286,7 @@ eng_setup(Evas *e, void *in)
    Evas_Engine_Info_Cairo_X11 *info;
 
    info = (Evas_Engine_Info_Cairo_X11 *)in;
-   printf("CAIRO: setup info...\n");
+   INF("CAIRO: setup info...");
    if (!e->engine.data.output)
      e->engine.data.output =
      eng_output_setup(e->output.w,
@@ -314,7 +322,7 @@ eng_output_setup(int w, int h, Display *disp, Drawable draw, Visual *vis, Colorm
 	free(re);
 	return NULL;
      }
-   printf("CAIRO: cairo window setup done.\n");
+   INF("CAIRO: cairo window setup done.");
    evas_common_cpu_init();
 
    evas_common_blend_init();
@@ -1480,6 +1488,12 @@ eng_font_hinting_can_hint(void *data, int hinting)
    re = (Render_Engine *)data;
 }
 
+static int
+eng_font_last_up_to_pos(void *data __UNUSED__, void *font, const char *text, int x, int y)
+{
+   return evas_common_font_query_last_up_to_pos(font, text, x, y);
+}
+
 static Eina_Bool
 eng_canvas_alpha_get(void *data, void *context)
 {
@@ -1490,6 +1504,12 @@ static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
+   _evas_engine_cairo_X11_log_dom = eina_log_domain_register("EvasCairoX11Engine", EINA_COLOR_BLUE);
+   if(_evas_engine_cairo_X11_log_dom < 0)
+     {
+       EINA_LOG_ERR("Impossible to create a log doamin for the cairo (X11) engine.\n");
+       return 0;
+     }
    em->functions = (void *)(&eng_func);
    return 1;
 }
@@ -1497,6 +1517,7 @@ module_open(Evas_Module *em)
 static void
 module_close(Evas_Module *em)
 {
+  eina_log_domain_unregister(_evas_engine_cairo_X11_log_dom);
 }
 
 static Evas_Module_Api evas_modapi =

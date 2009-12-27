@@ -58,19 +58,24 @@ typedef struct _Mem Mem;
 struct _Server
 {
    char *socket_path;
-   int fd;
    Eina_List *clients;
    int (*func) (void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *data);
    void *data;
    pid_t pid;
    int server_id;
-   int req_from, req_to;
+   // for channel 2;
+   struct {
+      int fd;
+      int req_from, req_to;
+   } ch[2];
+   void *main_handle;
 };
 
 struct _Client
 {
    Server *server;
    unsigned char *buf;
+   Client *client_main;
    int bufsize, bufalloc;
    int fd;
    unsigned char *inbuf;
@@ -121,6 +126,7 @@ typedef struct
 {
    pid_t pid;
    int server_id;
+   void *handle;
 } Op_Init;
 typedef struct
 {
@@ -128,6 +134,9 @@ typedef struct
       int    scale_down_by;
       double dpi;
       int    w, h;
+      struct {
+         int x, y, w, h;
+      } region;
    } lopt;
 } Op_Load; // +"file""key"
 typedef struct

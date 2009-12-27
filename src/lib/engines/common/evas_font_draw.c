@@ -2,12 +2,8 @@
  * vim:ts=8:sw=3:sts=8:noexpandtab:cino=>5n-3f0^-2{2
  */
 
-/* Internationalization (RTL and Arabic contextualizing)
- * was added by Tom Hacohen (tom@stosb.com)
- */
-
-
 #include "evas_common.h"
+#include "evas_private.h"
 #include "evas_blend_private.h"
 
 #include "evas_intl_utils.h" /*defines INTERNATIONAL_SUPPORT if possible */
@@ -55,6 +51,8 @@ evas_common_font_int_cache_glyph_get(RGBA_Font_Int *fi, FT_UInt index)
    fg->glyph_out = (FT_BitmapGlyph)fg->glyph;
    fg->index = hindex;
 
+   fg->fi = fi;
+   
    eina_hash_direct_add(fi->glyphs, &fg->index, fg);
    return fg;
 }
@@ -181,13 +179,14 @@ evas_common_font_glyph_search(RGBA_Font *fn, RGBA_Font_Int **fi_ret, int gl)
 
 
 static void
-evas_common_font_draw_internal(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font *fn, int x, int y, const char *text,
+evas_common_font_draw_internal(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font *fn, int x, int y, const char *in_text,
                                RGBA_Gfx_Func func, int ext_x, int ext_y, int ext_w, int ext_h, RGBA_Font_Int *fi,
                                int im_w, int im_h __UNUSED__, int use_kerning
                                )
 {
    int pen_x, pen_y;
    int chr;
+   const char *text = in_text;
    FT_Face pface = NULL;
    FT_UInt prev_index;
    DATA32 *im;
@@ -195,18 +194,17 @@ evas_common_font_draw_internal(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font
    int char_index = 0; /* the index of the current char */
 
 #ifdef INTERNATIONAL_SUPPORT
-   int bidi_err = 0;
+   int len = 0;
    /*FIXME: should get the direction by parmater */
-   FriBidiCharType direction = FRIBIDI_TYPE_ON;
-   FriBidiLevel *level_list;
+   EvasIntlParType direction = FRIBIDI_TYPE_ON;
+   EvasIntlLevel *level_list;
 
    /* change the text to visual ordering and update the level list
     * for as minimum impact on the code as possible just use text as an
     * holder, will change in the future.*/
-   {
-      char *tmp = evas_intl_utf8_to_visual(text, &bidi_err, &direction, &level_list);
-      text = (tmp) ? tmp : text;
-   }
+   char *visual_text = evas_intl_utf8_to_visual(in_text, &len, &direction, NULL, NULL, &level_list);
+   text = (visual_text) ? visual_text : in_text;
+   
 #endif
 
    pen_x = x;
@@ -221,6 +219,7 @@ evas_common_font_draw_internal(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font
 	int gl, kern;
 
 	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
+
 	if (gl == 0) break;
 	index = evas_common_font_glyph_search(fn, &fi, gl);
 	/* hmmm kerning means i can't sanely do my own cached metric tables! */
@@ -394,11 +393,8 @@ evas_common_font_draw_internal(RGBA_Image *dst, RGBA_Draw_Context *dc, RGBA_Font
 	  prev_index = index;
      }
 #ifdef INTERNATIONAL_SUPPORT
-   if (bidi_err >= 0)
-     {
-	free(level_list);
-	free(text);
-     }
+   if (level_list) free(level_list);
+   if (visual_text) free(visual_text);
 #endif
 }
 

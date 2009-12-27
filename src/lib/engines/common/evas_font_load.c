@@ -20,8 +20,8 @@ static Eina_Bool font_modify_cache_cb(const Eina_Hash *hash, const void *key, vo
 static Eina_Bool font_flush_free_glyph_cb(const Eina_Hash *hash, const void *key, void *data, void *fdata);
 
 static int
-_evas_font_cache_int_cmp(const RGBA_Font_Int *k1, int k1_length,
-			 const RGBA_Font_Int *k2, int k2_length)
+_evas_font_cache_int_cmp(const RGBA_Font_Int *k1, int k1_length __UNUSED__,
+			 const RGBA_Font_Int *k2, int k2_length __UNUSED__)
 {
    /* RGBA_Font_Source->name is a stringshare */
    if (k1->src->name == k2->src->name)
@@ -30,7 +30,7 @@ _evas_font_cache_int_cmp(const RGBA_Font_Int *k1, int k1_length,
 }
 
 static int
-_evas_font_cache_int_hash(const RGBA_Font_Int *key, int key_length)
+_evas_font_cache_int_hash(const RGBA_Font_Int *key, int key_length __UNUSED__)
 {
    int hash;
 
@@ -356,6 +356,8 @@ evas_common_font_int_load_init(RGBA_Font_Int *fi)
 EAPI RGBA_Font_Int *
 evas_common_font_int_load_complete(RGBA_Font_Int *fi)
 {
+   int val, dv;
+   int ret;
    int error;
 
    error = FT_New_Size(fi->src->ft.face, &(fi->ft.size));
@@ -402,6 +404,28 @@ evas_common_font_int_load_complete(RGBA_Font_Int *fi)
      }
    fi->src->current_size = fi->size;
 
+   fi->max_h = 0;
+   
+   val = (int)fi->src->ft.face->bbox.yMax;
+   if (fi->src->ft.face->units_per_EM != 0)
+     {
+        dv = (fi->src->ft.orig_upem * 2048) / fi->src->ft.face->units_per_EM;
+        ret = (val * fi->src->ft.face->size->metrics.y_scale) / (dv * dv);
+     }
+   else
+     ret = val;
+   fi->max_h += ret;
+   
+   val = -(int)fi->src->ft.face->bbox.yMin;
+   if (fi->src->ft.face->units_per_EM != 0)
+     {
+        dv = (fi->src->ft.orig_upem * 2048) / fi->src->ft.face->units_per_EM;
+        ret = (val * fi->src->ft.face->size->metrics.y_scale) / (dv * dv);
+     }
+   else
+     ret = val;
+   fi->max_h += ret;
+   
    return fi;
 }
 

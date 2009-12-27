@@ -3,6 +3,7 @@
 #include "evas_engine.h"
 #include "Evas_Engine_Software_Gdi.h"
 
+int _evas_engine_soft_gdi_log_dom = -1;
 /* function tables - filled in later (func and parent func) */
 static Evas_Func func, pfunc;
 
@@ -96,7 +97,6 @@ static void *
 eng_info(Evas *e __UNUSED__)
 {
    Evas_Engine_Info_Software_Gdi *info;
-
    info = calloc(1, sizeof(Evas_Engine_Info_Software_Gdi));
    if (!info) return NULL;
    info->magic.magic = rand();
@@ -107,7 +107,6 @@ static void
 eng_info_free(Evas *e __UNUSED__, void *info)
 {
    Evas_Engine_Info_Software_Gdi *in;
-
    in = (Evas_Engine_Info_Software_Gdi *)info;
    free(in);
 }
@@ -147,11 +146,13 @@ eng_setup(Evas *e, void *in)
                                                 0, 0);
 	re->ob->onebuf = ponebuf;
      }
-   if (!e->engine.data.output) return;
+   if (!e->engine.data.output) return 0;
    if (!e->engine.data.context)
      e->engine.data.context = e->engine.func->context_new(e->engine.data.output);
 
    re = e->engine.data.output;
+
+   return 1;
 }
 
 static void
@@ -332,6 +333,13 @@ module_open(Evas_Module *em)
    if (!em) return 0;
    /* get whatever engine module we inherit from */
    if (!_evas_module_engine_inherit(&pfunc, "software_generic")) return 0;
+
+   _evas_engine_soft_gdi_log_dom = eina_log_domain_register("EvasSoftGDI",EVAS_DEFAULT_LOG_COLOR);
+   if(_evas_engine_soft_gdi_log_dom < 0)
+     {
+       EINA_LOG_ERR("Impossible to create a log domain for the Soft_GDI engine.\n");
+       return 0;
+     }
    /* store it for later use */
    func = pfunc;
    /* now to override methods */
@@ -358,6 +366,7 @@ module_open(Evas_Module *em)
 static void
 module_close(Evas_Module *em)
 {
+  eina_log_domain_unregister(_evas_engine_soft_gdi_log_dom);
 }
 
 static Evas_Module_Api evas_modapi =

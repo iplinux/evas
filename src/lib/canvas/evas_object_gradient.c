@@ -78,6 +78,7 @@ static const Evas_Object_Func object_func =
      NULL,
      NULL,
      NULL,
+     NULL,
      NULL
 };
 
@@ -411,11 +412,11 @@ evas_object_gradient_fill_angle_get(const Evas_Object *obj)
    Evas_Object_Gradient *o;
 
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
-   return 0.0;
+   return 0;
    MAGIC_CHECK_END();
    o = (Evas_Object_Gradient *)(obj->object_data);
    MAGIC_CHECK(o, Evas_Object_Gradient, MAGIC_OBJ_GRADIENT);
-   return 0.0;
+   return 0;
    MAGIC_CHECK_END();
    return o->cur.fill.angle;
 }
@@ -503,11 +504,11 @@ evas_object_gradient_angle_get(const Evas_Object *obj)
    Evas_Object_Gradient *o;
 
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
-   return 0.0;
+   return 0;
    MAGIC_CHECK_END();
    o = (Evas_Object_Gradient *)(obj->object_data);
    MAGIC_CHECK(o, Evas_Object_Gradient, MAGIC_OBJ_GRADIENT);
-   return 0.0;
+   return 0;
    MAGIC_CHECK_END();
    return o->cur.map.angle;
 }
@@ -711,8 +712,19 @@ evas_object_gradient_type_get(const Evas_Object *obj, char **name, char **params
 */
 
 /**
-   FIXME: ...
-**/
+ * Convert a given color from HSV to RGB format.
+ *
+ * @param h The Hue component of the color.
+ * @param s The Saturation component of the color.
+ * @param v The Value component of the color.
+ * @param r The Red component of the color.
+ * @param g The Green component of the color.
+ * @param b The Blue component of the color.
+ *
+ * This function converts a given color in HSV color format to RGB
+ * color format.
+ *
+ **/
 EAPI void
 evas_color_hsv_to_rgb(float h, float s, float v, int *r, int *g, int *b)
 {
@@ -720,8 +732,19 @@ evas_color_hsv_to_rgb(float h, float s, float v, int *r, int *g, int *b)
 }
 
 /**
-   FIXME: ...
-**/
+ * Convert a given color from RGB to HSV format.
+ *
+ * @param r The Red component of the color.
+ * @param g The Green component of the color.
+ * @param b The Blue component of the color.
+ * @param h The Hue component of the color.
+ * @param s The Saturation component of the color.
+ * @param v The Value component of the color.
+ *
+ * This function converts a given color in RGB color format to HSV
+ * color format.
+ *
+ **/
 EAPI void
 evas_color_rgb_to_hsv(int r, int g, int b, float *h, float *s, float *v)
 {
@@ -729,8 +752,17 @@ evas_color_rgb_to_hsv(int r, int g, int b, float *h, float *s, float *v)
 }
 
 /**
-   FIXME: ...
-**/
+ * Pre-multiplies a rgb triplet by an alpha factor.
+ *
+ * @param a The alpha factor.
+ * @param r The Red component of the color.
+ * @param g The Green component of the color.
+ * @param b The Blue component of the color.
+ *
+ * This function pre-multiplies a given rbg triplet by an alpha
+ * factor. Alpha factor is used to define transparency.
+ *
+ **/
 EAPI void
 evas_color_argb_premul(int a, int *r, int *g, int *b)
 {
@@ -738,8 +770,19 @@ evas_color_argb_premul(int a, int *r, int *g, int *b)
 }
 
 /**
-   FIXME: ...
-**/
+ * Undo pre-multiplication of a rgb triplet by an alpha factor.
+ *
+ * @param a The alpha factor.
+ * @param r The Red component of the color.
+ * @param g The Green component of the color.
+ * @param b The Blue component of the color.
+ *
+ * This function undoes pre-multiplication a given rbg triplet by an
+ * alpha factor. Alpha factor is used to define transparency.
+ *
+ * @see evas_color_argb_premul().
+ *
+ **/
 EAPI void
 evas_color_argb_unpremul(int a, int *r, int *g, int *b)
 {
@@ -747,8 +790,15 @@ evas_color_argb_unpremul(int a, int *r, int *g, int *b)
 }
 
 /**
-   FIXME: ...
-**/
+ * Pre-multiplies data by an alpha factor.
+ *
+ * @param data The data value.
+ * @param len  The lenght value.
+ *
+ * This function pre-multiplies a given data by an alpha
+ * factor. Alpha factor is used to define transparency.
+ *
+ **/
 EAPI void
 evas_data_argb_premul(unsigned int *data, unsigned int len)
 {
@@ -757,8 +807,15 @@ evas_data_argb_premul(unsigned int *data, unsigned int len)
 }
 
 /**
-   FIXME: ...
-**/
+ * Undo pre-multiplication data by an alpha factor.
+ *
+ * @param data The data value.
+ * @param len  The lenght value.
+ *
+ * This function undoes pre-multiplication of a given data by an alpha
+ * factor. Alpha factor is used to define transparency.
+ *
+ **/
 EAPI void
 evas_data_argb_unpremul(unsigned int *data, unsigned int len)
 {
@@ -803,14 +860,14 @@ evas_object_gradient_new(void)
    o = calloc(1, sizeof(Evas_Object_Gradient));
    if (!o) return NULL;
    o->magic = MAGIC_OBJ_GRADIENT;
-   o->cur.map.angle = 0.0;
+   o->cur.map.angle = 0;
    o->cur.map.offset = 0.0;
    o->cur.map.direction = 1;
    o->cur.fill.x = 0;
    o->cur.fill.y = 0;
    o->cur.fill.w = 1;
    o->cur.fill.h = 1;
-   o->cur.fill.angle = 0.0;
+   o->cur.fill.angle = 0;
    o->cur.fill.spread = EVAS_TEXTURE_REFLECT;
    o->cur.type.name = strdup("linear");
    o->cur.type.params = NULL;
@@ -845,7 +902,7 @@ evas_object_gradient_free(Evas_Object *obj)
       obj->layer->evas->engine.func->gradient_free(obj->layer->evas->engine.data.output,
 						   o->engine_data);
    free(o);
-   obj->object_data = NULL; 
+   obj->object_data = NULL;
 }
 
 
@@ -978,7 +1035,7 @@ evas_object_gradient_render_pre(Evas_Object *obj)
 								o->engine_data);
 	o->cur.gradient_opaque = obj->layer->evas->engine.func->gradient_is_opaque(obj->layer->evas->engine.data.output,
 										   obj->layer->evas->engine.data.context,
-				  						   o->engine_data,
+										   o->engine_data,
 										   obj->cur.cache.clip.x, obj->cur.cache.clip.y,
 										   obj->cur.cache.clip.w, obj->cur.cache.clip.h);
 
@@ -993,6 +1050,11 @@ evas_object_gradient_render_pre(Evas_Object *obj)
      {
 	evas_object_render_pre_visible_change(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 	goto done;
+     }
+   if (obj->cur.map != obj->prev.map)
+     {
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
+        goto done;
      }
    /* its not visible - we accounted for it appearing or not so just abort */
    if (!is_v) goto done;
@@ -1016,7 +1078,7 @@ evas_object_gradient_render_pre(Evas_Object *obj)
    /* it obviously didn't change - add a NO obscure - this "unupdates"  this */
    /* area so if there were updates for it they get wiped. don't do it if we */
    /* arent fully opaque and we are visible */
-   
+
    if (evas_object_is_visible(obj) &&
        evas_object_is_opaque(obj))
      obj->layer->evas->engine.func->output_redraws_rect_del(obj->layer->evas->engine.data.output,
@@ -1024,7 +1086,7 @@ evas_object_gradient_render_pre(Evas_Object *obj)
 							    obj->cur.cache.clip.y,
 							    obj->cur.cache.clip.w,
 							    obj->cur.cache.clip.h);
-   
+
    done:
    evas_object_render_pre_effect_updates(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 }
@@ -1088,8 +1150,9 @@ evas_object_gradient_is_opaque(Evas_Object *obj)
    /* currently fully opaque over the entire region it occupies */
    o = (Evas_Object_Gradient *)(obj->object_data);
    if (!o->engine_data) return 0;
+   if ((obj->cur.map) && (obj->cur.usemap)) return 0;
    return o->cur.gradient_opaque;
- }
+}
 
 static int
 evas_object_gradient_was_opaque(Evas_Object *obj)

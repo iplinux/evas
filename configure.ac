@@ -1,7 +1,8 @@
 # get rid of that stupid cache mechanism
 rm -f config.cache
 
-AC_INIT([evas], [0.9.9.062], [enlightenment-devel@lists.sourceforge.net])
+AC_INIT([evas], [0.9.9.063], [enlightenment-devel@lists.sourceforge.net])
+release="ver-svn-05"
 AC_PREREQ([2.52])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_MACRO_DIR([m4])
@@ -9,8 +10,9 @@ AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
 AC_ISC_POSIX
 
-AM_INIT_AUTOMAKE(1.6 dist-bzip2)
-AM_CONFIG_HEADER(config.h)
+AM_INIT_AUTOMAKE([1.6 dist-bzip2])
+AM_CONFIG_HEADER([config.h])
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 AC_LIBTOOL_WIN32_DLL
 define([AC_LIBTOOL_LANG_F77_CONFIG], [:])dnl
@@ -26,7 +28,6 @@ AC_SUBST(version_info)
 
 ### Needed information
 
-release="ver-svn-03"
 case "$host_os" in
    mingw32ce* | cegcc*)
       MODULE_ARCH="$host_os-$host_cpu"
@@ -109,6 +110,8 @@ case "$host_os" in
       ;;
 esac
 
+requirement_evas=""
+
 
 ### Additional options to configure
 
@@ -140,6 +143,14 @@ AC_PROG_CC
 # pkg-config
 PKG_PROG_PKG_CONFIG
 
+# Check whether pkg-config supports Requires.private
+if $PKG_CONFIG --atleast-pkgconfig-version 0.22; then
+   pkgconfig_requires_private="Requires.private"
+else
+   pkgconfig_requires_private="Requires"
+fi
+AC_SUBST(pkgconfig_requires_private)
+
 # doxygen program for documentation building
 EFL_CHECK_DOXYGEN([build_doc="yes"], [build_doc="no"])
 
@@ -150,8 +161,9 @@ EFL_CHECK_DOXYGEN([build_doc="yes"], [build_doc="no"])
 
 case "$host_os" in
    mingw* | cegcc*)
-   PKG_CHECK_MODULES([EVIL], [evil])
-   AC_DEFINE(HAVE_EVIL, 1, [Set to 1 if evil package is installed])
+      PKG_CHECK_MODULES([EVIL], [evil])
+      AC_DEFINE(HAVE_EVIL, 1, [Set to 1 if evil package is installed])
+      requirement_evas="evil ${requirement_evas}"
    ;;
 esac
 
@@ -162,6 +174,8 @@ PKG_CHECK_MODULES([EINA], [eina-0])
 
 # Freetype
 PKG_CHECK_MODULES([FREETYPE], [freetype2 >= 9.3.0])
+
+requirement_evas="freetype2 eina-0 ${requirement_evas}"
 
 ## optional dependencies
 
@@ -185,6 +199,7 @@ if test "x${want_fontconfig}" = "xyes" -o "x${want_fontconfig}" = "xauto" ; then
       [
        have_fontconfig="yes"
        AC_DEFINE(HAVE_FONTCONFIG, 1, [have fontconfig searching capabilities])
+       requirement_evas="fontconfig ${requirement_evas}"
       ],
       [
        if test "x${want_fontconfig}" = "xyes" -a "x${use_strict}" = "xyes" ; then
@@ -212,6 +227,7 @@ if test "x${want_fribidi}" = "xyes" -o "x${want_fribidi}" = "xauto" ; then
       [
        have_fribidi="yes"
        AC_DEFINE(HAVE_FRIBIDI, 1, [have fribidi support])
+       requirement_evas="fribidi ${requirement_evas}"
       ],
       [
        if test "x$want_fribidi" = "xyes" -a "x$use_strict" = "xyes" ; then
@@ -363,6 +379,68 @@ AM_CONDITIONAL([EVAS_CSERVE], [test "x${want_evas_cserve}" = "xyes"])
 
 
 
+#######################################
+## GL force flavor gles
+gl_flavor_gles="no"
+AC_MSG_CHECKING(whether to build GLES flavor of GL)
+AC_ARG_ENABLE(gl-flavor-gles,
+  AC_HELP_STRING([--enable-gl-flavor-gles], [enable gles falvor of gl instead of standard]),
+  [
+      if test "x$enableval" = "xyes" ; then
+        AC_MSG_RESULT(yes)
+        gl_flavor_gles="yes"
+      else
+        AC_MSG_RESULT(no)
+        gl_flavor_gles="no"
+      fi
+  ], [
+      AC_MSG_RESULT(no)
+      gl_flavor_gles="no"
+  ]
+)
+
+#######################################
+## GLES variety sgx
+gles_variety_sgx="no"
+AC_MSG_CHECKING(whether to build GLES variety for SGX)
+AC_ARG_ENABLE(gles-variety-sgx,
+  AC_HELP_STRING([--enable-gles-variety-sgx], [GLES variety SGX 3D unit]),
+  [
+      if test "x$enableval" = "xyes" ; then
+        AC_MSG_RESULT(yes)
+        AC_DEFINE(GLES_VARIETY_SGX, 1, [Imagination SGX GLES2 support])
+        gles_variety_sgx="yes"
+      else
+        AC_MSG_RESULT(no)
+        gles_variety_sgx="no"
+      fi
+  ], [
+      AC_MSG_RESULT(no)
+      gles_variety_sgx="no"
+  ]
+)
+
+#######################################
+## GLES variety s3c6410
+gles_variety_s3c6410="no"
+AC_MSG_CHECKING(whether to build GLES variety for s3c6410)
+AC_ARG_ENABLE(gles-variety-s3c6410,
+  AC_HELP_STRING([--enable-gles-variety-s3c6410], [GLES variety s3c6410 3D unit]),
+  [
+      if test "x$enableval" = "xyes" ; then
+        AC_MSG_RESULT(yes)
+        AC_DEFINE(GLES_VARIETY_S3C6410, 1, [Samsung S3c6410 GLES2 support])
+        gles_variety_s3c6410="yes"
+      else
+        AC_MSG_RESULT(no)
+        gles_variety_s3c6410="no"
+      fi
+  ], [
+      AC_MSG_RESULT(no)
+      gles_variety_s3c6410="no"
+  ]
+)
+
 #####################################################################
 ## Engines
 
@@ -419,15 +497,12 @@ have_evas_engine_gl_common="no"
 if test "x$have_evas_engine_gl_x11" = "xyes" -o "x$have_evas_engine_gl_glew" = "xyes"; then
    AC_DEFINE(BUILD_ENGINE_GL_COMMON, 1, [Generic OpenGL Rendering Support])
    have_evas_engine_gl_common="yes"
-   evas_engine_gl_common_libs="-lglu32"
-fi
-
-if test "x$have_evas_engine_gl_x11" = "xyes" ; then
-   evas_engine_gl_common_libs="-lGL -lGLU -lpthread"
+   evas_engine_gl_common_libs=""
 fi
 
 if test "x$have_evas_engine_gl_glew" = "xyes" ; then
-   evas_engine_gl_common_libs="-lglu32"
+   have_evas_engine_gl_common="yes"
+   evas_engine_gl_common_libs=""
 fi
 AC_SUBST([evas_engine_gl_common_libs])
 
@@ -1073,6 +1148,12 @@ EVAS_CONVERT_ROT(32, RGB, 270)
 EVAS_CONVERT_ROT(32, RGB, 90)
 
 #######################################
+## Convert to 8bpp grayscale with 256 value, no palette
+EVAS_CONVERT_COLOR(8, GRY, 1)
+## Convert to 8bpp grayscale with 16 value, no palette
+EVAS_CONVERT_COLOR(8, GRY, 16)
+
+#######################################
 ## Convert to 8bpp grayscale, 64-palette
 conv_8_grayscale_64="yes"
 AC_MSG_CHECKING(whether to build 8bpp grayscale 64-palette converter code)
@@ -1109,6 +1190,7 @@ if test x$want_valgrind = "xyes"; then
     [
       AC_DEFINE(HAVE_VALGRIND, 1, [Valgrind support])
       have_valgrind=yes
+      requirement_evas="valgrind ${requirement_evas}"
     ],
     [
       if test "x$want_valgrind" = "xyes" -a "x$use_strict" = "xyes" ; then
@@ -1124,6 +1206,7 @@ fi
 AC_SUBST(altivec_cflags)
 AC_SUBST(pthread_cflags)
 AC_SUBST(pthread_libs)
+AC_SUBST(requirement_evas)
 
 
 #####################################################################
@@ -1233,7 +1316,7 @@ echo "Engines:"
 echo "  Software Memory Buffer.....: $have_evas_engine_buffer"
 echo "  Software X11...............: $have_evas_engine_software_x11 (Xlib: $have_evas_engine_software_xlib) (XCB: $have_evas_engine_software_xcb)"
 echo "  XRender X11................: $have_evas_engine_xrender_x11 (XCB: $have_evas_engine_xrender_xcb)"
-echo "  OpenGL X11.................: $have_evas_engine_gl_x11"
+echo "  OpenGL X11.................: $have_evas_engine_gl_x11 (GLES: $gl_flavor_gles) (SGX: $gles_variety_sgx) (s3c6410: $gles_variety_s3c6410)"
 #echo "  Cairo X11..................: $have_evas_engine_cairo_x11"
 echo "  Software GDI...............: $have_evas_engine_software_gdi"
 echo "  Software DirectDraw........: $have_evas_engine_software_ddraw"
@@ -1255,7 +1338,7 @@ echo "Image Loaders:"
 echo "  EDB.....................: $have_evas_image_loader_edb"
 echo "  EET.....................: $have_evas_image_loader_eet"
 echo "  GIF.....................: $have_evas_image_loader_gif"
-echo "  JPEG....................: $have_evas_image_loader_jpeg"
+echo "  JPEG....................: $have_evas_image_loader_jpeg (region: $have_jpeg_region)"
 echo "  PMAPS...................: $have_evas_image_loader_pmaps"
 echo "  PNG.....................: $have_evas_image_loader_png"
 echo "  SVG.....................: $have_evas_image_loader_svg"
@@ -1307,6 +1390,8 @@ echo "  8bpp RGB 222............: $conv_8_rgb_222"
 echo "  8bpp RGB 221............: $conv_8_rgb_221"
 echo "  8bpp RGB 121............: $conv_8_rgb_121"
 echo "  8bpp RGB 111............: $conv_8_rgb_111"
+echo "  8bpp Grayscale (256)....: $conv_8_gry_1"
+echo "  8bpp Grayscale (16).....: $conv_8_gry_16"
 echo "  8bpp Grayscale 64-pal...: $conv_8_grayscale_64"
 # FIXME: add grayscale and B&W support
 echo "  16bpp RGB 565...........: $conv_16_rgb_565"

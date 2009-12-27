@@ -38,32 +38,32 @@ evas_software_wince_ddraw_init(HWND window,
    priv = (Evas_Engine_WinCE_DDraw_Priv *)malloc(sizeof(Evas_Engine_WinCE_DDraw_Priv));
    if (!priv)
      return NULL;
-
+   
    priv->module = LoadLibrary(L"ddraw.dll");
    if (!priv->module)
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Can not load ddraw.dll\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] Can not load ddraw.dll\n");
         goto free_priv;
      }
 
    lib_DirectDrawCreate = (fct_DirectDrawCreate)GetProcAddress(priv->module, L"DirectDrawCreate");
    if (!lib_DirectDrawCreate)
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Can not initialize DirectDraw\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] Can not initialize DirectDraw\n");
         goto free_lib;
      }
 
    res = lib_DirectDrawCreate(NULL, (IUnknown**)&priv->object, NULL);
    if (FAILED(res))
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Can not create DirectDraw object\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] Can not create DirectDraw object\n");
         goto free_lib;
      }
 
    res = priv->object->SetCooperativeLevel(window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
    if (FAILED(res))
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Can not set window to fullscreen\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] Can not set window to fullscreen\n");
         goto release_object;
      }
 
@@ -75,7 +75,7 @@ evas_software_wince_ddraw_init(HWND window,
    res = priv->object->CreateSurface(&surface_desc, &priv->surface, NULL);
    if (FAILED(res))
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Can not create surface\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] Can not create surface\n");
         goto release_object;
      }
 
@@ -95,16 +95,16 @@ evas_software_wince_ddraw_init(HWND window,
    if ((priv->width != width) ||
        (priv->height != height))
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Size mismatch\n");
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] asked : %dx%d\n", width, height);
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] got   : %dx%d\n", priv->width, priv->height);
+        fprintf(stderr, "[Engine] [WinCE DDraw] Size mismatch\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] asked : %dx%d\n", width, height);
+        fprintf(stderr, "[Engine] [WinCE DDraw] got   : %dx%d\n", priv->width, priv->height);
         goto release_surface;
      }
 
    res = priv->surface->Unlock(NULL);
    if (FAILED(res))
      {
-        fprintf(stderr, "[Evas] [Engine] [WinCE DDraw] Can not unlock surface\n");
+        fprintf(stderr, "[Engine] [WinCE DDraw] Can not unlock surface\n");
         goto release_surface;
      }
 

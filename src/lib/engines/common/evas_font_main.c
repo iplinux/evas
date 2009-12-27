@@ -3,7 +3,7 @@
  */
 
 #include "evas_common.h"
-
+#include "evas_private.h"
 FT_Library      evas_ft_lib = 0;
 static int      initialised = 0;
 
@@ -136,9 +136,11 @@ evas_common_font_utf8_get_next(const unsigned char *buf, int *iindex)
    int index = *iindex, len, r;
    unsigned char d, d2, d3, d4;
 
-   d = buf[index++];
-   if (!d)
+   /* if this char is the null terminator, exit */
+   if (!buf[index])
      return 0;
+     
+   d = buf[index++];
 
    while (buf[index] && ((buf[index] & 0xc0) == 0x80))
      index++;
@@ -194,12 +196,15 @@ evas_common_font_utf8_get_prev(const unsigned char *buf, int *iindex)
     * Returns 0 to indicate there is no prev char
     */
 
+   int r;
    int index = *iindex;
-   if (index <= 0)
+   /* although when index == 0 there's no previous char, we still want to get
+    * the current char */
+   if (index < 0) 
      return 0;
 
    /* First obtain the codepoint at iindex */
-   int r = evas_common_font_utf8_get_next(buf, &index);
+   r = evas_common_font_utf8_get_next(buf, &index);
 
    /* Next advance iindex to previous codepoint */
    index = *iindex;

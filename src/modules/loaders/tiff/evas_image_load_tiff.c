@@ -174,7 +174,8 @@ evas_image_load_file_head_tiff(Image_Entry *ie, const char *file, const char *ke
    if (tiff_image.alpha != EXTRASAMPLE_UNSPECIFIED)
      ie->flags.alpha = 1;
    if ((tiff_image.width < 1) || (tiff_image.height < 1) ||
-       (tiff_image.width > 8192) || (tiff_image.height > 8192))
+       (tiff_image.width > IMG_MAX_SIZE) || (tiff_image.height > IMG_MAX_SIZE) ||
+       IMG_TOO_BIG(tiff_image.width, tiff_image.height))
      {
 	TIFFClose(tif);
 	return 0;
@@ -265,17 +266,17 @@ evas_image_load_file_data_tiff(Image_Entry *ie, const char *file, const char *ke
 
    if (!rast)
      {
-        fprintf(stderr, "Evas Tiff loader: out of memory\n");
-
-        TIFFRGBAImageEnd((TIFFRGBAImage *) & rgba_image);
-        TIFFClose(tif);
-
+       ERR("Evas Tiff loader: out of memory");
+       
+       TIFFRGBAImageEnd((TIFFRGBAImage *) & rgba_image);
+       TIFFClose(tif);
+       
         return 0;
      }
 
    if (rgba_image.rgba.put.any == NULL)
      {
-        fprintf(stderr, "Evas Tiff loader: no put function");
+	ERR("Evas Tiff loader: no put function");
 
         _TIFFfree(rast);
         TIFFRGBAImageEnd((TIFFRGBAImage *) & rgba_image);
@@ -311,7 +312,7 @@ evas_image_load_file_data_tiff(Image_Entry *ie, const char *file, const char *ke
      }
    else
      {
-        printf("channel bits == %i\n", (int)rgba_image.rgba.samplesperpixel);
+        INF("channel bits == %i", (int)rgba_image.rgba.samplesperpixel);
      }
 
    _TIFFfree(rast);

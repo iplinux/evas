@@ -5,8 +5,10 @@
 #include <time.h>
 #include <SDL/SDL.h>
 
+#include "evas_common.h"
 #include "evas_engine.h"
 
+int _evas_engine_soft_sdl_log_dom = -1;
 /* #define DEBUG_SDL */
 
 static Evas_Func	func = {};
@@ -66,21 +68,18 @@ static const Evas_Cache_Engine_Image_Func       _sdl_cache_engine_image_cb = {
 static void*
 evas_engine_sdl_info		(Evas* e __UNUSED__)
 {
-   Evas_Engine_Info_SDL*	info = calloc(1, sizeof (Evas_Engine_Info_SDL));
-
-   if (!info)
-      return NULL;
-
+   Evas_Engine_Info_SDL*	info;
+   info = calloc(1, sizeof (Evas_Engine_Info_SDL));
+   if (!info) return NULL;
    info->magic.magic = rand();
-
    return info;
 }
 
 static void
 evas_engine_sdl_info_free	(Evas* e __UNUSED__, void* info)
 {
-   Evas_Engine_Info_SDL*	in = (Evas_Engine_Info_SDL*) info;
-
+   Evas_Engine_Info_SDL*	in;
+   in = (Evas_Engine_Info_SDL*) info;
    free(in);
    in = NULL;
 }
@@ -99,7 +98,7 @@ evas_engine_sdl_setup		(Evas* e, void* in)
 
    if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0)
      {
-	fprintf(stderr, "SDL_Init failed with %s\n", SDL_GetError());
+	ERR("SDL_Init failed with %s", SDL_GetError());
         SDL_Quit();
         return 0;
      }
@@ -170,13 +169,13 @@ evas_engine_sdl_output_resize	(void *data, int w, int h)
 
    if (!surface)
      {
-	fprintf(stderr, "Unable to change the resolution to : %ix%i\n", w, h);
+	ERR("Unable to change the resolution to : %ix%i", w, h);
 	exit(-1);
      }
    re->rgba_engine_image = (SDL_Engine_Image_Entry *) evas_cache_engine_image_engine(re->cache, surface);
    if (!re->rgba_engine_image)
      {
-	fprintf(stderr, "RGBA_Image allocation from SDL failed\n");
+	ERR("RGBA_Image allocation from SDL failed");
 	exit(-1);
      }
 
@@ -620,6 +619,40 @@ evas_engine_sdl_image_draw(void *data, void *context, void *surface, void *image
 }
 
 static void
+evas_engine_sdl_image_map4_draw(void *data __UNUSED__, void *context, void *surface, void *image, RGBA_Map_Point *p, int smooth, int level)
+{
+   SDL_Engine_Image_Entry *eim = image;
+   SDL_Engine_Image_Entry *dst = surface;
+   int mustlock_im = 0;
+   int mustlock_dst = 0;
+
+   if (!eim || !dst) return;
+
+   if (SDL_MUSTLOCK(dst->surface))
+     {
+        mustlock_dst = 1;
+	SDL_LockSurface(dst->surface);
+	_SDL_UPDATE_PIXELS(dst);
+     }
+
+   if (eim->surface && SDL_MUSTLOCK(eim->surface))
+     {
+        mustlock_im = 1;
+	SDL_LockSurface(eim->surface);
+	_SDL_UPDATE_PIXELS(eim);
+     }
+
+   evas_common_map4_rgba(eim->cache_entry.src, dst->cache_entry.src, context, p, smooth, level);
+   evas_common_cpu_end_opt();
+
+   if (mustlock_im)
+     SDL_UnlockSurface(eim->surface);
+
+   if (mustlock_dst)
+     SDL_UnlockSurface(dst->surface);
+}
+
+static void
 evas_engine_sdl_image_scale_hint_set(void *data __UNUSED__, void *image, int hint)
 {
 }
@@ -820,6 +853,12 @@ static int module_open(Evas_Module *em)
    if (!em) return 0;
    /* get whatever engine module we inherit from */
    if (!_evas_module_engine_inherit(&pfunc, "software_generic")) return 0;
+   _evas_engine_soft_sdl_log_dom = eina_log_domain_register("EvasSoftSdl",EVAS_DEFAULT_LOG_COLOR);
+   if(_evas_engine_soft_sdl_log_dom < 0) 
+     {
+       EINA_LOG_ERR("Impossible to create a log domain for the SoftSdl engine.\n");
+       return 0;
+     }
    /* store it for later use */
    func = pfunc;
    /* now to override methods */
@@ -855,6 +894,7 @@ static int module_open(Evas_Module *em)
    ORD(image_border_set);
    ORD(image_border_get);
    ORD(image_draw);
+   ORD(image_map4_draw);
    ORD(image_comment_get);
    ORD(image_format_get);
    ORD(image_cache_flush);
@@ -876,7 +916,7 @@ static int module_open(Evas_Module *em)
 
 static void module_close(Evas_Module *em)
 {
-
+  eina_log_domain_unregister(_evas_engine_soft_sdl_log_dom);
 }
 
 static Evas_Module_Api evas_modapi =
@@ -924,7 +964,7 @@ _sdl_output_setup		(int w, int h, int fullscreen, int noframe, int alpha, int hw
    re->cache = evas_cache_engine_image_init(&_sdl_cache_engine_image_cb, evas_common_image_cache_get());
    if (!re->cache)
      {
-        fprintf(stderr, "Evas_Cache_Engine_Image allocation failed!\n");
+        CRIT("Evas_Cache_Engine_Image allocation failed!");
         exit(-1);
      }
 
@@ -939,7 +979,7 @@ _sdl_output_setup		(int w, int h, int fullscreen, int noframe, int alpha, int hw
 
    if (!surface)
      {
-        fprintf(stderr, "SDL_SetVideoMode [ %i x %i x 32 ] failed.\n", w, h);
+        CRIT("SDL_SetVideoMode [ %i x %i x 32 ] failed.", w, h);
         exit(-1);
      }
 
@@ -951,7 +991,7 @@ _sdl_output_setup		(int w, int h, int fullscreen, int noframe, int alpha, int hw
    re->rgba_engine_image = (SDL_Engine_Image_Entry *) evas_cache_engine_image_engine(re->cache, surface);
    if (!re->rgba_engine_image)
      {
-	fprintf(stderr, "RGBA_Image allocation from SDL failed\n");
+	CRIT("RGBA_Image allocation from SDL failed");
         exit(-1);
      }
 
@@ -1136,17 +1176,17 @@ _sdl_image_debug(const char* context, Engine_Image_Entry* eie)
 {
    SDL_Engine_Image_Entry       *eim = (SDL_Engine_Image_Entry *) eie;
 
-   printf ("*** %s image (%p) ***\n", context, eim);
+   DBG("*** %s image (%p) ***", context, eim);
    if (eim)
      {
-        printf ("* W: %i\n* H: %i\n* R: %i\n", eim->cache_entry.w, eim->cache_entry.h, eim->cache_entry.references);
+        DBG ("* W: %i\n* H: %i\n* R: %i", eim->cache_entry.w, eim->cache_entry.h, eim->cache_entry.references);
         if (eim->cache_entry.src)
-          printf ("* Pixels: %p\n* SDL Surface: %p\n",((RGBA_Image*) eim->cache_entry.src)->image.data, eim->surface);
+          DBG ("* Pixels: %p\n* SDL Surface: %p",((RGBA_Image*) eim->cache_entry.src)->image.data, eim->surface);
         if (eim->surface)
-          printf ("* Surface->pixels: %p\n", eim->surface->pixels);
-	printf ("* Key: %s\n", eim->cache_entry.cache_key);
-        printf ("* Reference: %i\n", eim->cache_entry.references);
+          DBG ("* Surface->pixels: %p", eim->surface->pixels);
+	DBG ("* Key: %s", eim->cache_entry.cache_key);
+        DBG ("* Reference: %i", eim->cache_entry.references);
      }
-   printf ("*** ***\n");
+   DBG ("*** ***");
 }
 #endif

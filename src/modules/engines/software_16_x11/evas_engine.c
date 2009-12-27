@@ -4,6 +4,7 @@
 #include "Evas_Engine_Software_16_X11.h"
 #include "evas_common_soft16.h"
 
+int _evas_engine_soft16_x11_log_dom = -1;
 /* function tables - filled in later (func and parent func) */
 static Evas_Func func, pfunc;
 
@@ -47,7 +48,7 @@ static void *
 eng_info(Evas *e)
 {
    Evas_Engine_Info_Software_16_X11 *info;
-
+   
    info = calloc(1, sizeof(Evas_Engine_Info_Software_16_X11));
    if (!info) return NULL;
    info->magic.magic = rand();
@@ -59,7 +60,6 @@ static void
 eng_info_free(Evas *e __UNUSED__, void *info)
 {
    Evas_Engine_Info_Software_16_X11 *in;
-
    in = (Evas_Engine_Info_Software_16_X11 *)info;
    free(in);
 }
@@ -459,7 +459,7 @@ static void
 eng_output_redraws_next_update_push(void *data, void *surface __UNUSED__, int x, int y, int w, int h)
 {
    Render_Engine *re;
-   XRectangle r;
+   XRectangle r = { 0, 0, 0, 0 };
 
    re = (Render_Engine *)data;
 
@@ -543,7 +543,7 @@ eng_output_idle_flush(void *data)
 }
 
 static Eina_Bool
-eng_canvas_alpha_get(void *data, void *context)
+eng_canvas_alpha_get(void *data __UNUSED__, void *context __UNUSED__)
 {
    return EINA_FALSE;
 }
@@ -555,6 +555,13 @@ module_open(Evas_Module *em)
    if (!em) return 0;
    /* get whatever engine module we inherit from */
    if (!_evas_module_engine_inherit(&pfunc, "software_16")) return 0;
+   _evas_engine_soft16_x11_log_dom = eina_log_domain_register("EvasSoft16X11", EVAS_DEFAULT_LOG_COLOR);
+   if(_evas_engine_soft16_x11_log_dom < 0) 
+     {
+       EINA_LOG_ERR("Impossible to create a log domain for the Soft16_X11 engine.\n");
+       return 0;
+     }
+
    /* store it for later use */
    func = pfunc;
    /* now to override methods */
@@ -581,6 +588,7 @@ module_open(Evas_Module *em)
 static void
 module_close(Evas_Module *em)
 {
+  eina_log_domain_unregister(_evas_engine_soft16_x11_log_dom);
 }
 
 static Evas_Module_Api evas_modapi =

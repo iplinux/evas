@@ -1,54 +1,123 @@
 #include "evas_common.h"
 #include "evas_private.h"
 
+static void
+_evas_event_havemap_adjust(Evas_Object *obj, Evas_Coord *x, Evas_Coord *y)
+{
+   Evas_Object *pmap;
+   
+   if (!obj->havemap_parent) return;
+   pmap = obj->smart.parent;
+   if (!pmap) return;
+   while (pmap)
+     {
+        if ((pmap->cur.map) && (pmap->cur.map->count == 4) && (pmap->cur.usemap))
+          break;
+        pmap = pmap->smart.parent;
+     }
+   if (!pmap) return;
+   evas_map_coords_get(pmap->cur.map, *x, *y, x, y, obj->mouse_grabbed);
+}
+
 static Eina_List *
-_evas_event_object_list_in_get(Evas *e, Eina_List *in, const Eina_Inlist *list, Evas_Object *stop, int x, int y, int *no_rep)
+_evas_event_object_list_in_get(Evas *e, Eina_List *in,
+                               const Eina_Inlist *list, Evas_Object *stop, 
+                               int x, int y, int *no_rep, int parmap)
 {
    Evas_Object *obj;
-
    if (!list) return in;
    EINA_INLIST_REVERSE_FOREACH(list, obj)
      {
+        if (parmap) obj->havemap_parent = 1;
+        else obj->havemap_parent = 0;
+        
 	if (obj == stop)
 	  {
 	     *no_rep = 1;
 	     return in;
 	  }
-	if (!evas_event_passes_through(obj))
-	  {
-	     if ((obj->cur.visible) && (obj->delete_me == 0) &&
-		 (!obj->clip.clipees) &&
-		 (evas_object_clippers_is_visible(obj)))
-	       {
-		  if (obj->smart.smart)
-		    {
-		       int norep;
-
-		       norep = 0;
-		       in = _evas_event_object_list_in_get(e, in,
-							   evas_object_smart_members_get_direct(obj),
-							   stop, x, y, &norep);
-		       if (norep)
-			 {
-			    *no_rep = 1;
-			    return in;
-			 }
-		    }
-		  else
-		    {
-		       if (evas_object_is_in_output_rect(obj, x, y, 1, 1) &&
-		           ((!obj->precise_is_inside) ||
-			    (evas_object_is_inside(obj, x, y))))
-			 {
-			    in = eina_list_append(in, obj);
-			    if (!obj->repeat_events)
-			      {
-				 *no_rep = 1;
-				 return in;
-			      }
-			 }
-		    }
-	       }
+	if (evas_event_passes_through(obj)) continue;
+        if ((obj->cur.visible) && (obj->delete_me == 0) &&
+            (!obj->clip.clipees) &&
+            (evas_object_clippers_is_visible(obj)))
+          {
+             if (obj->smart.smart)
+               {
+                  int norep;
+                  int inside;
+                  
+                  norep = 0;
+                  if (((obj->cur.map) && (obj->cur.map->count == 4) && (obj->cur.usemap)))
+                    {
+                       inside = evas_object_is_in_output_rect(obj, x, y, 1, 1);
+                       if (inside)
+                         {
+                            if (!evas_map_coords_get(obj->cur.map, x, y,
+                                                     &(obj->cur.map->mx),
+                                                     &(obj->cur.map->my), 0))
+                              {
+                                 inside = 0;
+                              }
+                            else
+                              {
+                                 parmap = 1;
+                              }
+                         }
+                       else
+                         inside = 0;
+                       if (inside)
+                         {
+                            in = _evas_event_object_list_in_get
+                              (e, in,
+                               evas_object_smart_members_get_direct(obj),
+                               stop, 
+                               obj->cur.geometry.x + obj->cur.map->mx, 
+                               obj->cur.geometry.y + obj->cur.map->my, 
+                               &norep, parmap);
+                         }
+                    }
+                  else
+                    {
+                       in = _evas_event_object_list_in_get
+                         (e, in, evas_object_smart_members_get_direct(obj),
+                          stop, x, y, &norep, parmap);
+                    }
+                  if (norep)
+                    {
+                       *no_rep = 1;
+                       return in;
+                    }
+               }
+             else
+               {
+                  int inside = 1;
+                  
+                  if (((obj->cur.map) && (obj->cur.map->count == 4) && (obj->cur.usemap)))
+                    {
+                       inside = evas_object_is_in_output_rect(obj, x, y, 1, 1);
+                       if (inside)
+                         {
+                            if (!evas_map_coords_get(obj->cur.map, x, y,
+                                                     &(obj->cur.map->mx),
+                                                     &(obj->cur.map->my), 0))
+                              inside = 0;
+                         }
+                       else
+                         inside = 0;
+                    }
+                  else
+                    inside = evas_object_is_in_output_rect(obj, x, y, 1, 1);
+                  if (inside && ((!obj->precise_is_inside) ||
+                                 (evas_object_is_inside(obj, x, y))))
+                    {
+                       in = eina_list_append(in, obj);
+                       if (!obj->repeat_events)
+                         {
+                            *no_rep = 1;
+                            return in;
+                         }
+                    }
+               }
 	  }
      }
    *no_rep = 0;
@@ -67,8 +136,9 @@ evas_event_objects_event_list(Evas *e, Evas_Object *stop, int x, int y)
 	int norep;
 
 	norep = 0;
-	in = _evas_event_object_list_in_get(e, in, EINA_INLIST_GET(lay->objects), stop,
-					    x, y, &norep);
+	in = _evas_event_object_list_in_get(e, in, 
+                                            EINA_INLIST_GET(lay->objects), 
+                                            stop, x, y, &norep, 0);
 	if (norep) return in;
      }
    return in;
@@ -90,17 +160,18 @@ evas_event_list_copy(Eina_List *list)
 /**
  * @defgroup Evas_Event_Freezing_Group Evas Event Freezing Functions
  *
- * Functions that deal with the freezing of event processing of an evas.
+ * Functions that deal with the freezing of event processing of an
+ * evas.
  */
 
 /**
- * Freeze all event processing
- * @param e The canvas to freeze event processing on
+ * Freeze all event processing.
+ * @param e The canvas to freeze event processing on.
  *
- * This function will indicate to evas that the canvas @p e is to have all
- * event processing frozen until a matching evas_event_thaw() function is
- * called on the same canvas. Every freeze call must be matched by a thaw call
- * in order to completely thaw out a canvas.
+ * This function will indicate to evas that the canvas @p e is to have
+ * all event processing frozen until a matching evas_event_thaw()
+ * function is called on the same canvas. Every freeze call must be
+ * matched by a thaw call in order to completely thaw out a canvas.
  *
  * Example:
  * @code
@@ -124,13 +195,14 @@ evas_event_freeze(Evas *e)
 }
 
 /**
- * Thaw a canvas out after freezing
- * @param e The canvas to thaw out
+ * Thaw a canvas out after freezing.
  *
- * This will thaw out a canvas after a matching evas_event_freeze() call. If
- * this call completely thaws out a canvas, events will start being processed
- * again after this call, but this call will not invole any "missed" events
- * to be evaluated.
+ * @param e The canvas to thaw out.
+ *
+ * This will thaw out a canvas after a matching evas_event_freeze()
+ * call. If this call completely thaws out a canvas, events will start
+ * being processed again after this call, but this call will not
+ * invole any "missed" events to be evaluated.
  *
  * See evas_event_freeze() for an example.
  * @ingroup Evas_Event_Freezing_Group
@@ -162,14 +234,15 @@ evas_event_thaw(Evas *e)
 }
 
 /**
- * Return the freeze count of a given canvas
- * @param e The canvas to fetch the freeze count from
+ * Return the freeze count of a given canvas.
+ * @param e The canvas to fetch the freeze count from.
  *
- * This returns the number of times the canvas has been told to freeze events.
- * It is possible to call evas_event_freeze() multiple times, and these must
- * be matched by evas_event_thaw() calls. This call allows the program to
- * discover just how many times things have been frozen in case it may want
- * to break out of a deep freeze state where the count is high.
+ * This returns the number of times the canvas has been told to freeze
+ * events.  It is possible to call evas_event_freeze() multiple times,
+ * and these must be matched by evas_event_thaw() calls. This call
+ * allows the program to discover just how many times things have been
+ * frozen in case it may want to break out of a deep freeze state
+ * where the count is high.
  *
  * Example:
  * @code
@@ -188,10 +261,19 @@ evas_event_freeze_get(const Evas *e)
    return e->events_frozen;
 }
 
+
 /**
- * To be documented.
+ * Mouse down event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param b The button number.
+ * @param flags The evas button flags.
+ * @param timestamp The timestamp of the mouse down event.
+ * @param data The data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * the mouse button is pressed. It prepares information to be treated
+ * by the callback function.
  *
  */
 EAPI void
@@ -228,6 +310,9 @@ evas_event_feed_mouse_down(Evas *e, int b, Evas_Button_Flags flags, unsigned int
    copy = evas_event_list_copy(e->pointer.object.in);
    EINA_LIST_FOREACH(copy, l, obj)
      {
+        ev.canvas.x = e->pointer.x;
+        ev.canvas.y = e->pointer.y;
+        _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 	if (obj->pointer_mode != EVAS_OBJECT_POINTER_MODE_NOGRAB)
 	  {
 	     obj->mouse_grabbed++;
@@ -244,9 +329,17 @@ evas_event_feed_mouse_down(Evas *e, int b, Evas_Button_Flags flags, unsigned int
 }
 
 /**
- * To be documented.
+ * Mouse up event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param b The button number.
+ * @param flags evas button flags.
+ * @param timestamp The timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * the mouse button is released. It prepares information to be treated
+ * by the callback function.
  *
  */
 EAPI void
@@ -285,6 +378,9 @@ evas_event_feed_mouse_up(Evas *e, int b, Evas_Button_Flags flags, unsigned int t
 	copy = evas_event_list_copy(e->pointer.object.in);
 	EINA_LIST_FOREACH(copy, l, obj)
 	  {
+             ev.canvas.x = e->pointer.x;
+             ev.canvas.y = e->pointer.y;
+             _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 	     if ((obj->pointer_mode != EVAS_OBJECT_POINTER_MODE_NOGRAB) &&
 		 (obj->mouse_in) && (obj->mouse_grabbed > 0))
 	       {
@@ -324,6 +420,9 @@ evas_event_feed_mouse_up(Evas *e, int b, Evas_Button_Flags flags, unsigned int t
 	     copy = evas_event_list_copy(e->pointer.object.in);
 	     EINA_LIST_FOREACH(copy, l, obj)
 	       {
+                  ev.canvas.x = e->pointer.x;
+                  ev.canvas.y = e->pointer.y;
+                  _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 		  if ((!eina_list_data_find(ins, obj)) ||
 		      (!e->pointer.inside))
 		    {
@@ -354,6 +453,9 @@ evas_event_feed_mouse_up(Evas *e, int b, Evas_Button_Flags flags, unsigned int t
 
 	     EINA_LIST_FOREACH(ins, l, obj)
 	       {
+                  ev.canvas.x = e->pointer.x;
+                  ev.canvas.y = e->pointer.y;
+                  _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 		  if (!eina_list_data_find(e->pointer.object.in, obj))
 		    {
 
@@ -378,22 +480,28 @@ evas_event_feed_mouse_up(Evas *e, int b, Evas_Button_Flags flags, unsigned int t
 
    if (e->pointer.mouse_grabbed < 0)
      {
-        fprintf(stderr, "BUG? e->pointer.mouse_grabbed (=%d) < 0!\n",
-                e->pointer.mouse_grabbed);
+        ERR("BUG? e->pointer.mouse_grabbed (=%d) < 0!",
+	      e->pointer.mouse_grabbed);
      }
 
    if ((e->pointer.button == 0) && (e->pointer.mouse_grabbed != 0))
      {
-        printf("restore to 0 grabs (from %i)\n", e->pointer.mouse_grabbed);
+        INF("restore to 0 grabs (from %i)", e->pointer.mouse_grabbed);
 	e->pointer.mouse_grabbed = 0;
      }
    _evas_unwalk(e);
 }
 
+
 /**
- * To be documented.
+ * Mouse cancel event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param timestamp The timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function will call evas_event_feed_mouse_up() when a
+ * mouse cancel event happens.
  *
  */
 EAPI void
@@ -417,9 +525,17 @@ evas_event_feed_mouse_cancel(Evas *e, unsigned int timestamp, const void *data)
 }
 
 /**
- * To be documented.
+ * Mouse wheel event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param direction The wheel mouse direction.
+ * @param z How much mouse wheel was scrolled up or down.
+ * @param timestamp The timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * the mouse wheel is scrolled up or down. It prepares information to
+ * be treated by the callback function.
  *
  */
 EAPI void
@@ -453,6 +569,9 @@ evas_event_feed_mouse_wheel(Evas *e, int direction, int z, unsigned int timestam
 
    EINA_LIST_FOREACH(copy, l, obj)
      {
+        ev.canvas.x = e->pointer.x;
+        ev.canvas.y = e->pointer.y;
+        _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 	if (e->events_frozen <= 0)
 	  evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_WHEEL, &ev);
 	if (e->delete_me) break;
@@ -463,9 +582,17 @@ evas_event_feed_mouse_wheel(Evas *e, int direction, int z, unsigned int timestam
 }
 
 /**
- * To be documented.
+ * Mouse move event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param x The horizontal position of the mouse pointer.
+ * @param y The vertical position of the mouse pointer.
+ * @param timestamp The timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * the mouse is moved from its last position. It prepares information
+ * to be treated by the callback function.
  *
  */
 EAPI void
@@ -522,6 +649,11 @@ evas_event_feed_mouse_move(Evas *e, int x, int y, unsigned int timestamp, const 
 	     copy = evas_event_list_copy(e->pointer.object.in);
 	     EINA_LIST_FOREACH(copy, l, obj)
 	       {
+                  ev.cur.canvas.x = e->pointer.x;
+                  ev.cur.canvas.y = e->pointer.y;
+                  _evas_event_havemap_adjust(obj, &ev.cur.canvas.x, &ev.cur.canvas.y);
+                  e->pointer.x = ev.cur.canvas.x;
+                  e->pointer.y = ev.cur.canvas.y;
 		  if ((obj->cur.visible) &&
 		      (evas_object_clippers_is_visible(obj)) &&
 		      (!evas_event_passes_through(obj)) &&
@@ -561,12 +693,13 @@ evas_event_feed_mouse_move(Evas *e, int x, int y, unsigned int timestamp, const 
 		  outs = eina_list_remove(outs, obj);
 		  if ((obj->mouse_grabbed == 0) && (!e->delete_me))
 		    {
+                       ev.canvas.x = e->pointer.x;
+                       ev.canvas.y = e->pointer.y;
+                       _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 		       e->pointer.object.in = eina_list_remove(e->pointer.object.in, obj);
-			 {
-			    obj->mouse_in = 0;
-			    if (e->events_frozen <= 0)
-			      evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_OUT, &ev);
-			 }
+                       obj->mouse_in = 0;
+                       if (e->events_frozen <= 0)
+                         evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_OUT, &ev);
 		    }
 	       }
 	  }
@@ -638,6 +771,9 @@ evas_event_feed_mouse_move(Evas *e, int x, int y, unsigned int timestamp, const 
 	       {
 		  if ((px != x) || (py != y))
 		    {
+                       ev.cur.canvas.x = e->pointer.x;
+                       ev.cur.canvas.y = e->pointer.y;
+                       _evas_event_havemap_adjust(obj, &ev.cur.canvas.x, &ev.cur.canvas.y);
 		       if (e->events_frozen <= 0)
 			 evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_MOVE, &ev);
 		    }
@@ -646,6 +782,9 @@ evas_event_feed_mouse_move(Evas *e, int x, int y, unsigned int timestamp, const 
 	     else
 	       {
 		  obj->mouse_in = 0;
+                  ev2.canvas.x = e->pointer.x;
+                  ev2.canvas.y = e->pointer.y;
+                  _evas_event_havemap_adjust(obj, &ev2.canvas.x, &ev2.canvas.y);
 		  if (e->events_frozen <= 0)
 		    evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_OUT, &ev2);
 	       }
@@ -655,6 +794,9 @@ evas_event_feed_mouse_move(Evas *e, int x, int y, unsigned int timestamp, const 
 	/* go thru our current list of ins */
 	EINA_LIST_FOREACH(ins, l, obj)
 	  {
+             ev3.canvas.x = e->pointer.x;
+             ev3.canvas.y = e->pointer.y;
+             _evas_event_havemap_adjust(obj, &ev3.canvas.x, &ev3.canvas.y);
 	     /* if its not in the old list of ins send an enter event */
 	     if (!eina_list_data_find(e->pointer.object.in, obj))
 	       {
@@ -674,9 +816,15 @@ evas_event_feed_mouse_move(Evas *e, int x, int y, unsigned int timestamp, const 
 }
 
 /**
- * To be documented.
+ * Mouse in event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param timestamp The timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * the mouse in event happens. It prepares information to be treated
+ * by the callback function.
  *
  */
 EAPI void
@@ -713,6 +861,9 @@ evas_event_feed_mouse_in(Evas *e, unsigned int timestamp, const void *data)
    ins = evas_event_objects_event_list(e, NULL, e->pointer.x, e->pointer.y);
    EINA_LIST_FOREACH(ins, l, obj)
      {
+        ev.canvas.x = e->pointer.x;
+        ev.canvas.y = e->pointer.y;
+        _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
 	if (!eina_list_data_find(e->pointer.object.in, obj))
 	  {
 
@@ -731,9 +882,15 @@ evas_event_feed_mouse_in(Evas *e, unsigned int timestamp, const void *data)
 }
 
 /**
- * To be documented.
+ * Mouse out event feed.
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param timestamp Timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * the mouse out event happens. It prepares information to be treated
+ * by the callback function.
  *
  */
 EAPI void
@@ -771,7 +928,10 @@ evas_event_feed_mouse_out(Evas *e, unsigned int timestamp, const void *data)
 	copy = evas_event_list_copy(e->pointer.object.in);
 	EINA_LIST_FOREACH(copy, l, obj)
 	  {
-	    obj->mouse_in = 0;
+             ev.canvas.x = e->pointer.x;
+             ev.canvas.y = e->pointer.y;
+             _evas_event_havemap_adjust(obj, &ev.canvas.x, &ev.canvas.y);
+             obj->mouse_in = 0;
 	    if (e->events_frozen <= 0)
 	      evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_OUT, &ev);
 
@@ -785,9 +945,19 @@ evas_event_feed_mouse_out(Evas *e, unsigned int timestamp, const void *data)
 }
 
 /**
- * To be documented.
+ * Key down event feed
  *
- * FIXME: To be fixed.
+ * @param e The canvas to thaw out
+ * @param keyname  Name of the key
+ * @param key The key pressed.
+ * @param string A String
+ * @param compose The compose string
+ * @param timestamp Timestamp of the mouse up event
+ * @param data Data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * a key is pressed. It prepares information to be treated by the
+ * callback function.
  *
  */
 EAPI void
@@ -867,9 +1037,19 @@ evas_event_feed_key_down(Evas *e, const char *keyname, const char *key, const ch
 }
 
 /**
- * To be documented.
+ * Key up event feed
  *
- * FIXME: To be fixed.
+ * @param e The canvas to thaw out
+ * @param keyname  Name of the key
+ * @param key The key released.
+ * @param string string
+ * @param compose compose
+ * @param timestamp Timestamp of the mouse up event
+ * @param data Data for canvas.
+ *
+ * This function will set some evas properties that is necessary when
+ * a key is released. It prepares information to be treated by the
+ * callback function.
  *
  */
 EAPI void
@@ -949,9 +1129,14 @@ evas_event_feed_key_up(Evas *e, const char *keyname, const char *key, const char
 }
 
 /**
- * To be documented.
+ * Hold event feed
  *
- * FIXME: To be fixed.
+ * @param e The given canvas pointer.
+ * @param hold The hold.
+ * @param timestamp The timestamp of the mouse up event.
+ * @param data The data for canvas.
+ *
+ * This function makes the object to stop sending events.
  *
  */
 EAPI void
@@ -1094,7 +1279,8 @@ evas_object_repeat_events_get(const Evas_Object *obj)
 }
 
 /**
- * Set whether events on a smart member object should propagate to its parent.
+ * Set whether events on a smart member object should propagate to its
+ * parent.
  *
  * @param obj the smart member object
  * @param prop wheter to propagate events or not
@@ -1146,14 +1332,16 @@ evas_object_propagate_events_get(const Evas_Object *obj)
  * @param obj
  * @param setting desired behavior.
  *
- * This function has direct effect on event callbacks related to mouse.
+ * This function has direct effect on event callbacks related to
+ * mouse.
  *
- * If @p setting is EVAS_OBJECT_POINTER_MODE_AUTOGRAB, then when mouse is
- * down at this object, events will be restricted to it as source, mouse
- * moves, for example, will be emitted even if outside this object area.
+ * If @p setting is EVAS_OBJECT_POINTER_MODE_AUTOGRAB, then when mouse
+ * is down at this object, events will be restricted to it as source,
+ * mouse moves, for example, will be emitted even if outside this
+ * object area.
  *
- * If @p setting is EVAS_OBJECT_POINTER_MODE_NOGRAB, then events will be
- * emitted just when inside this object area.
+ * If @p setting is EVAS_OBJECT_POINTER_MODE_NOGRAB, then events will
+ * be emitted just when inside this object area.
  *
  * The default value is EVAS_OBJECT_POINTER_MODE_AUTOGRAB.
  */

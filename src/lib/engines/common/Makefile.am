@@ -69,7 +69,9 @@ evas_regionbuf.c \
 evas_pipe.c \
 evas_intl_utils.c \
 evas_intl/evas_intl_arabic.c \
-evas_intl/evas_intl_arabic.h
+evas_intl/evas_intl_arabic.h \
+evas_map_image.c \
+evas_map_image.h
 
 EXTRA_DIST = \
 evas_blend.h \
@@ -106,7 +108,10 @@ evas_scale_smooth_scaler_noscale.c \
 evas_scale_smooth_scaler_up.c \
 evas_scale_span.h \
 evas_pipe.h \
-evas_intl_utils.h
+evas_intl_utils.h \
+evas_map_image_internal.c \
+evas_map_image_core.c \
+evas_map_image_loop.c
 
 libevas_engine_common_la_DEPENDENCIES = \
 $(top_builddir)/config.h

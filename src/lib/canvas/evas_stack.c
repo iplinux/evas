@@ -150,13 +150,13 @@ evas_object_lower(Evas_Object *obj)
 }
 
 /**
- * Stack @p obj immediately above @p above 
+ * Stack @p obj immediately above @p above
  *
  * If @p obj is a member of a smart object, then @p above must also be
  * a member of the same smart object.
  *
- * Similarly, if @p obj is not a member of smart object, @p above may 
- * not either. 
+ * Similarly, if @p obj is not a member of smart object, @p above may
+ * not either.
  *
  * @param obj the object to stack
  * @param above the object above which to stack
@@ -172,6 +172,7 @@ evas_object_stack_above(Evas_Object *obj, Evas_Object *above)
    MAGIC_CHECK(above, Evas_Object, MAGIC_OBJ);
    return;
    MAGIC_CHECK_END();
+   if (obj == above) return;
    if (evas_object_intercept_call_stack_above(obj, above)) return;
    if (!above)
      {
@@ -187,21 +188,26 @@ evas_object_stack_above(Evas_Object *obj, Evas_Object *above)
      {
 	if (obj->smart.parent != above->smart.parent)
 	  {
-//	     printf("BITCH! evas_object_stack_above(), %p not inside same smart as %p!\n", obj, above);
+	     ERR("BITCH! evas_object_stack_above(), %p not inside same smart as %p!", obj, above);
 	     return;
 	  }
 	evas_object_smart_member_stack_above(obj, above);
      }
    else
      {
-	if (above->smart.parent) return;
+	if (above->smart.parent)
+          {
+             ERR("BITCH! evas_object_stack_above(), %p stack above %p, but above has smart parent, obj does not\n", obj, above);
+             return;
+          }
 	if (obj->layer != above->layer)
 	  {
+             ERR("BITCH! evas_object_stack_above(), %p stack above %p, not matching layers\n", obj, above);
 	     return;
 	  }
 	if (obj->in_layer)
 	  {
- 	     obj->layer->objects = (Evas_Object *)eina_inlist_remove(EINA_INLIST_GET(obj->layer->objects),
+	     obj->layer->objects = (Evas_Object *)eina_inlist_remove(EINA_INLIST_GET(obj->layer->objects),
 								     EINA_INLIST_GET(obj));
 	     obj->layer->objects = (Evas_Object *)eina_inlist_append_relative(EINA_INLIST_GET(obj->layer->objects),
 									      EINA_INLIST_GET(obj),
@@ -238,13 +244,13 @@ evas_object_stack_above(Evas_Object *obj, Evas_Object *above)
 }
 
 /**
- * Stack @p obj immediately below @p below 
+ * Stack @p obj immediately below @p below
  *
  * If @p obj is a member of a smart object, then @p below must also be
  * a member of the same smart object.
  *
- * Similarly, if @p obj is not a member of smart object, @p below may 
- * not either. 
+ * Similarly, if @p obj is not a member of smart object, @p below may
+ * not either.
  *
  * @param obj the object to stack
  * @param below the object below which to stack
@@ -260,6 +266,7 @@ evas_object_stack_below(Evas_Object *obj, Evas_Object *below)
    MAGIC_CHECK(below, Evas_Object, MAGIC_OBJ);
    return;
    MAGIC_CHECK_END();
+   if (obj == below) return;
    if (evas_object_intercept_call_stack_below(obj, below)) return;
    if (!below)
      {
@@ -275,16 +282,21 @@ evas_object_stack_below(Evas_Object *obj, Evas_Object *below)
      {
 	if (obj->smart.parent != below->smart.parent)
 	  {
-//	     printf("BITCH! evas_object_stack_below(), %p not inside same smart as %p!\n", obj, below);
+	     ERR("BITCH! evas_object_stack_below(), %p not inside same smart as %p!", obj, below);
 	     return;
 	  }
 	evas_object_smart_member_stack_below(obj, below);
      }
    else
      {
-	if (below->smart.parent) return;
+	if (below->smart.parent)
+          {
+             ERR("BITCH! evas_object_stack_below(), %p stack below %p, but below has smart parent, obj does not\n", obj, below);
+             return;
+          }
 	if (obj->layer != below->layer)
 	  {
+             ERR("BITCH! evas_object_stack_below(), %p stack below %p, not matching layers\n", obj, below);
 	     return;
 	  }
 	if (obj->in_layer)
@@ -408,7 +420,7 @@ evas_object_bottom_get(const Evas *e)
    if (e->layers)
      {
 	Evas_Object *obj;
-	
+
 	obj = e->layers->objects;
 	while (obj)
 	  {

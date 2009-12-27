@@ -1,52 +1,62 @@
-dnl use: EVAS_CHECK_LOADER_DEP_EDB(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_EDB(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_EDB],
 [
 
+requirement=""
 have_dep="no"
 evas_image_loader_[]$1[]_cflags=""
 evas_image_loader_[]$1[]_libs=""
 
-PKG_CHECK_MODULES([EDB], [edb], [have_dep="yes"], [have_dep="no"])
+PKG_CHECK_MODULES([EDB], [edb], [have_dep="yes" requirement="edb"], [have_dep="no"])
 evas_image_loader_[]$1[]_cflags="${EDB_CFLAGS}"
 evas_image_loader_[]$1[]_libs="${EDB_LIBS}"
 
 AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
+if test "x$2" = "xstatic" ; then
+   requirement_evas="${requirement} ${requirement_evas}"
+fi
+
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_EET(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_EET(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_EET],
 [
 
+requirement=""
 have_dep="no"
 evas_image_loader_[]$1[]_cflags=""
 evas_image_loader_[]$1[]_libs=""
 
-PKG_CHECK_MODULES([EET], [eet >= 1.0.1], [have_dep="yes"], [have_dep="no"])
+PKG_CHECK_MODULES([EET], [eet >= 1.0.1], [have_dep="yes" requirement="eet"], [have_dep="no"])
 evas_image_loader_[]$1[]_cflags="${EET_CFLAGS}"
 evas_image_loader_[]$1[]_libs="${EET_LIBS}"
 
 AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
+if test "x$2" = "xstatic" ; then
+   requirement_evas="${requirement} ${requirement_evas}"
+fi
+
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_GIF(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_GIF(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_GIF],
 [
@@ -81,14 +91,14 @@ AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_JPEG(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_JPEG(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_JPEG],
 [
@@ -102,23 +112,39 @@ AC_CHECK_HEADER([jpeglib.h], [have_dep="yes"])
 if test "x${have_dep}"  = "xyes" ; then
    AC_CHECK_LIB([jpeg],
       [jpeg_CreateDecompress],
-      [evas_image_loader_[]$1[]_libs="-ljpeg"],
+      [
+        evas_image_loader_[]$1[]_libs="-ljpeg"
+        AC_COMPILE_IFELSE([[
+                          #include <stdio.h>
+                          #include <jpeglib.h>
+                          #include <setjmp.h>
+                          int main(int argc, char **argv) {
+                          struct jpeg_decompress_struct decomp;
+                          decomp.region_x = 0;
+                          }
+                        ]],
+                        [have_jpeg_region="yes"],
+                        [have_jpeg_region="no"])
+      ],
       [have_dep="no"]
    )
+   if test "x${have_jpeg_region}" = "xyes" ; then
+     AC_DEFINE(BUILD_LOADER_JPEG_REGION, [1], [JPEG Region Decode Support])
+   fi
 fi
 
 AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_PMAPS(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_PMAPS(loader, want_static[[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_PMAPS],
 [
@@ -131,27 +157,28 @@ AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_PNG(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_PNG(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_PNG],
 [
 
+requirement=""
 have_dep="no"
 evas_image_loader_[]$1[]_cflags=""
 evas_image_loader_[]$1[]_libs=""
 
 PKG_CHECK_EXISTS([libpng12],
-   [PKG_CHECK_MODULES([PNG], [libpng12], [have_dep="yes"], [have_dep="no"])],
+   [PKG_CHECK_MODULES([PNG], [libpng12], [have_dep="yes" requirement="libpng12"], [have_dep="no"])],
    [PKG_CHECK_EXISTS([libpng10],
-       [PKG_CHECK_MODULES([PNG], [libpng10], [have_dep="yes"], [have_dep="no"])],
-       [PKG_CHECK_MODULES([PNG], [libpng], [have_dep="yes"], [have_dep="no"])])]
+       [PKG_CHECK_MODULES([PNG], [libpng10], [have_dep="yes" requirement="libpng10"], [have_dep="no"])],
+       [PKG_CHECK_MODULES([PNG], [libpng], [have_dep="yes" requirement="libpng"], [have_dep="no"])])]
 )
 
 evas_image_loader_[]$1[]_cflags="${PNG_CFLAGS}"
@@ -160,25 +187,30 @@ evas_image_loader_[]$1[]_libs="${PNG_LIBS}"
 AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
+if test "x$2" = "xstatic" ; then
+   requirement_evas="${requirement} ${requirement_evas}"
+fi
+
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_SVG(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_SVG(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_SVG],
 [
 
+requirement=""
 have_dep="no"
 evas_image_loader_[]$1[]_cflags=""
 evas_image_loader_[]$1[]_libs=""
 
 PKG_CHECK_MODULES([SVG], [librsvg-2.0 >= 2.14.0],
-   [have_dep="yes"],
+   [have_dep="yes" requirement="librsvg-2.0"],
    [have_svg="no"]
 )
 
@@ -190,15 +222,19 @@ fi
 AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
+if test "x$2" = "xstatic" ; then
+   requirement_evas="${requirement} ${requirement_evas}"
+fi
+
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_TIFF(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_TIFF(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_TIFF],
 [
@@ -243,14 +279,14 @@ AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
 
-dnl use: EVAS_CHECK_LOADER_DEP_XPM(loader[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+dnl use: EVAS_CHECK_LOADER_DEP_XPM(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
 
 AC_DEFUN([EVAS_CHECK_LOADER_DEP_XPM],
 [
@@ -263,9 +299,9 @@ AC_SUBST([evas_image_loader_$1_cflags])
 AC_SUBST([evas_image_loader_$1_libs])
 
 if test "x${have_dep}" = "xyes" ; then
-  m4_default([$2], [:])
-else
   m4_default([$3], [:])
+else
+  m4_default([$4], [:])
 fi
 
 ])
@@ -303,7 +339,7 @@ AC_MSG_CHECKING([whether to enable $1 image loader])
 AC_MSG_RESULT([${want_loader}])
 
 if test "x${want_loader}" = "xyes" -o "x${want_loader}" = "xstatic" -o "x${want_loader}" = "xauto"; then
-   m4_default([EVAS_CHECK_LOADER_DEP_]m4_defn([UP]))(DOWN, [have_loader="yes"], [have_loader="no"])
+   m4_default([EVAS_CHECK_LOADER_DEP_]m4_defn([UP]))(DOWN, ${want_loader}, [have_loader="yes"], [have_loader="no"])
 fi
 
 if test "x${have_loader}" = "xno" -a "x${want_loader}" = "xyes" -a "x${use_strict}" = "xyes" ; then
@@ -371,6 +407,7 @@ fi
 
 if test "x$have_evas_font_loader_eet" = "xyes" ; then
    AC_DEFINE([BUILD_FONT_LOADER_EET], [1], [EET Font Loader Support])
+   requirement_evas="eet ${requirement_evas}"
 fi
 
 popdef([UP])

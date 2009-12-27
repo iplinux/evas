@@ -12,6 +12,43 @@
 #include <Eina.h>
 #include "Evas.h"
 
+/* macros needed to log message through eina_log */
+extern EAPI int _evas_log_dom_global;
+#ifdef  _EVAS_DEFAULT_LOG_DOM
+# undef _EVAS_DEFAULT_LOG_DOM
+#endif
+#define _EVAS_DEFAULT_LOG_DOM _evas_log_dom_global
+
+#ifdef EVAS_DEFAULT_LOG_COLOR
+# undef EVAS_DEFAULT_LOG_COLOR
+#endif
+#define EVAS_DEFAULT_LOG_COLOR EINA_COLOR_BLUE
+
+#ifdef ERR
+# undef ERR
+#endif
+#define ERR(...) EINA_LOG_DOM_ERR(_EVAS_DEFAULT_LOG_DOM, __VA_ARGS__)
+
+#ifdef DBG
+# undef DBG
+#endif
+#define DBG(...) EINA_LOG_DOM_DBG(_EVAS_DEFAULT_LOG_DOM, __VA_ARGS__)
+
+#ifdef INF
+# undef INF
+#endif
+#define INF(...) EINA_LOG_DOM_INFO(_EVAS_DEFAULT_LOG_DOM, __VA_ARGS__)
+
+#ifdef WRN
+# undef WRN
+#endif
+#define WRN(...) EINA_LOG_DOM_WARN(_EVAS_DEFAULT_LOG_DOM, __VA_ARGS__)
+
+#ifdef CRIT
+# undef CRIT
+#endif
+#define CRIT(...) EINA_LOG_DOM_CRIT(_EVAS_DEFAULT_LOG_DOM, __VA_ARGS__)
+
 /*****************************************************************************/
 
 #include "evas_options.h"
@@ -75,11 +112,11 @@
 #endif
 
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE
+# define _GNU_SOURCE
 #endif
 
 #ifndef BUILD_PTHREAD
-#undef BUILD_PIPE_RENDER
+# undef BUILD_PIPE_RENDER
 #endif
 
 #ifdef BUILD_PTHREAD
@@ -116,16 +153,6 @@
 # define TH_MAX 0
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <time.h>
-#include <ctype.h>
-#include <stdint.h>
-
 #ifdef HAVE_ALLOCA_H
 # include <alloca.h>
 #elif defined __GNUC__
@@ -141,6 +168,18 @@
 extern "C"
 # endif
 void *alloca (size_t);
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <ctype.h>
+#ifndef _MSC_VER
+# include <stdint.h>
+# include <unistd.h>
 #endif
 
 #include <ft2build.h>
@@ -166,6 +205,11 @@ void *alloca (size_t);
 /* use exact rects for updates not tiles */
 /* #define RECTUPDATE */
 #define TILESIZE 8
+#define IMG_MAX_SIZE 65000
+
+#define IMG_TOO_BIG(w, h) \
+   ((((unsigned long long)w) * ((unsigned long long)h)) >= \
+       ((1ULL << (29 * (sizeof(void *) / 4))) - 2048))
 
 #ifdef BUILD_SMALL_DITHER_MASK
 # define DM_TABLE     _evas_dither_44
@@ -408,6 +452,9 @@ struct _RGBA_Image_Loadopts
    int                  scale_down_by; // if > 1 then use this
    double               dpi; // if > 0.0 use this
    int                  w, h; // if > 0 use this
+   struct {
+      int               x, y, w, h;
+   } region;
 };
 
 struct _Image_Entry_Flags
@@ -422,6 +469,8 @@ struct _Image_Entry_Flags
    Eina_Bool alpha_sparse : 1;
 #ifdef BUILD_ASYNC_PRELOAD
    Eina_Bool preload      : 1;
+   Eina_Bool pending      : 1;
+   Eina_Bool in_pipe	  : 1;
 #endif
 };
 
@@ -477,6 +526,7 @@ struct _Image_Entry
    void                  *data1, *data2;
    int                    server_id;
    int                    connect_num;
+   int                    channel;
 };
 
 struct _Engine_Image_Entry
@@ -806,6 +856,7 @@ struct _RGBA_Font_Int
 
    int               size;
    int               real_size;
+   int               max_h;
 
    struct {
       FT_Size       size;
@@ -853,6 +904,7 @@ struct _RGBA_Font_Glyph
    /* this is a problem - only 1 engine at a time can extend such a font... grrr */
    void           *ext_dat;
    void           (*ext_dat_free) (void *ext_dat);
+   RGBA_Font_Int   *fi;
 };
 
 struct _RGBA_Gfx_Compositor
@@ -1069,7 +1121,6 @@ int  evas_common_cpu_have_cpuid                         (void);
 int  evas_common_cpu_has_feature                        (unsigned int feature);
 EAPI void evas_common_cpu_can_do                        (int *mmx, int *sse, int *sse2);
 EAPI void evas_common_cpu_end_opt                       (void);
-EAPI int evas_common_cpu_count                          (void);
 
 /****/
 #include "../engines/common/evas_blend.h"
@@ -1128,6 +1179,8 @@ Tilebuf_Rect *evas_common_regionbuf_rects_get (Regionbuf *rb);
 /****/
 #include "../engines/common/evas_draw.h"
 
+#include "../engines/common/evas_map_image.h"
+
 /****/
 #ifdef BUILD_PIPE_RENDER
 # include "../engines/common/evas_pipe.h"
@@ -1148,5 +1201,4 @@ void              evas_font_dir_cache_free(void);
 #ifdef __cplusplus
 }
 #endif
-
 #endif

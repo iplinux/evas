@@ -5,7 +5,9 @@
 #include <time.h>
 #include <SDL/SDL.h>
 
+#include "evas_common.h"
 #include "evas_engine.h"
+int _evas_engine_soft16_sdl_log_dom = -1;
 
 /* function tables - filled in later (func and parent func) */
 static Evas_Func        func = {};
@@ -64,7 +66,6 @@ static void *
 evas_engine_sdl16_info(Evas *e __UNUSED__)
 {
    Evas_Engine_Info_SDL_16      *info;
-
    info = calloc(1, sizeof(Evas_Engine_Info_SDL_16));
    if (!info) return NULL;
    info->magic.magic = rand();
@@ -75,7 +76,6 @@ static void
 evas_engine_sdl16_info_free(Evas *e __UNUSED__, void *info)
 {
    Evas_Engine_Info_SDL_16 *in;
-
    in = (Evas_Engine_Info_SDL_16 *)info;
    free(in);
 }
@@ -143,7 +143,7 @@ _sdl16_output_setup(int w, int h, int rotation, int fullscreen, int noframe, int
    re->cache = evas_cache_engine_image_init(&_sdl16_cache_engine_image_cb, evas_common_soft16_image_cache_get());
    if (!re->cache)
      {
-        fprintf(stderr, "Evas_Cache_Engine_Image allocation failed!\n");
+        ERR("Evas_Cache_Engine_Image allocation failed!");
         free(re);
         return NULL;
      }
@@ -169,7 +169,7 @@ _sdl16_output_setup(int w, int h, int rotation, int fullscreen, int noframe, int
                               | (noframe ? SDL_NOFRAME : 0));
    if (!surface)
      {
-        fprintf(stderr, "SDL_SetVideoMode [ %i x %i x 16 ] failed\n", w, h);
+        ERR("SDL_SetVideoMode [ %i x %i x 16 ] failed", w, h);
         evas_cache_engine_image_shutdown(re->cache);
         free(re);
         return NULL;
@@ -181,7 +181,7 @@ _sdl16_output_setup(int w, int h, int rotation, int fullscreen, int noframe, int
    re->soft16_engine_image = (SDL_Engine_Image_Entry *) evas_cache_engine_image_engine(re->cache, surface);
    if (!re->soft16_engine_image)
      {
-        fprintf(stderr, "Soft16_Image allocation from SDL failed\n");
+        ERR("Soft16_Image allocation from SDL failed");
         evas_cache_engine_image_shutdown(re->cache);
         free(re);
         return NULL;
@@ -203,7 +203,7 @@ evas_engine_sdl16_setup(Evas *e, void *in)
 
    if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0)
      {
-        fprintf(stderr, "SDL_Init failed with %s\n", SDL_GetError());
+        ERR("SDL_Init failed with %s", SDL_GetError());
         SDL_Quit();
         return 0;
      }
@@ -262,13 +262,13 @@ evas_engine_sdl16_output_resize(void *data, int w, int h)
                               | (re->flags.noframe ? SDL_NOFRAME : 0));
    if (!surface)
      {
-        fprintf(stderr, "Unable to change the resolution to : %ix%i\n", w, h);
+        ERR("Unable to change the resolution to : %ix%i", w, h);
         exit(-1);
      }
    re->soft16_engine_image = (SDL_Engine_Image_Entry *) evas_cache_engine_image_engine(re->cache, surface);
    if (!re->soft16_engine_image)
      {
-	fprintf(stderr, "RGBA_Image allocation from SDL failed\n");
+	ERR("RGBA_Image allocation from SDL failed");
 	exit(-1);
      }
 
@@ -611,12 +611,12 @@ evas_engine_sdl16_image_new_from_copied_data(void *data,
 
    if (cspace != EVAS_COLORSPACE_RGB565_A5P)
      {
-        fprintf(stderr, "Unsupported colorspace %d in %s() (%s:%d)\n",
+        WRN("Unsupported colorspace %d in %s() (%s:%d)",
                 cspace, __FUNCTION__, __FILE__, __LINE__);
         return NULL;
      }
 
-   fprintf(stderr, "s image_data: %p\n", image_data);
+   WRN("s image_data: %p", image_data);
 
    return evas_cache_engine_image_copied_data(re->cache,
                                               w, h,
@@ -631,7 +631,7 @@ evas_engine_sdl16_image_new_from_data(void *data, int w, int h, DATA32* image_da
 
    if (cspace != EVAS_COLORSPACE_RGB565_A5P)
      {
-        fprintf(stderr, "Unsupported colorspace %d in %s() (%s:%d)\n",
+        WRN("Unsupported colorspace %d in %s() (%s:%d)",
                 cspace, __FUNCTION__, __FILE__, __LINE__);
         return NULL;
      }
@@ -817,6 +817,11 @@ evas_engine_sdl16_image_draw(void *data __UNUSED__, void *context, void *surface
 
    if (mustlock_dst)
      SDL_UnlockSurface(dst->surface);
+}
+
+static void
+evas_engine_sdl16_image_map4_draw(void *data __UNUSED__, void *context, void *surface, void *image, RGBA_Map_Point *p, int smooth, int level)
+{
 }
 
 static void
@@ -1029,6 +1034,13 @@ module_open(Evas_Module *em)
    if (!em) return 0;
    /* get whatever engine module we inherit from */
    if (!_evas_module_engine_inherit(&pfunc, "software_16")) return 0;
+   _evas_engine_soft16_sdl_log_dom = eina_log_domain_register("EvasSoft16SDL",EVAS_DEFAULT_LOG_COLOR);
+   if(_evas_engine_soft16_sdl_log_dom < 0)
+     {
+       EINA_LOG_ERR("Impossible to create a log domain for the Soft16_SDL engine.\n");
+       return 0;
+     }
+
    /* store it for later use */
    func = pfunc;
    /* now to override methods */
@@ -1065,6 +1077,7 @@ module_open(Evas_Module *em)
    ORD(image_border_set);
    ORD(image_border_get);
    ORD(image_draw);
+   ORD(image_map4_draw);
    ORD(image_cache_flush);
    ORD(image_cache_set);
    ORD(image_cache_get);
@@ -1087,6 +1100,7 @@ module_open(Evas_Module *em)
 static void
 module_close(Evas_Module *em)
 {
+  eina_log_domain_unregister(_evas_engine_soft16_sdl_log_dom);
 }
 
 static Evas_Module_Api evas_modapi =

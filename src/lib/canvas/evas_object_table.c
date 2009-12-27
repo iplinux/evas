@@ -22,6 +22,8 @@ struct _Evas_Object_Table_Option
    } pad;
    Eina_Bool expand_h : 1; /* XXX required? */
    Eina_Bool expand_v : 1; /* XXX required? */
+   Eina_Bool fill_h : 1;
+   Eina_Bool fill_v : 1;
 };
 
 struct _Evas_Object_Table_Cache
@@ -91,9 +93,8 @@ struct _Evas_Object_Table_Accessor
   EVAS_OBJECT_TABLE_DATA_GET(o, ptr);					\
   if (!ptr)								\
     {									\
-       fprintf(stderr, "CRITICAL: no widget data for object %p (%s)\n",	\
-	       o, evas_object_type_get(o));				\
-       fflush(stderr);							\
+      CRIT("no widget data for object %p (%s)",		\
+	   o, evas_object_type_get(o));					\
        abort();								\
        return;								\
 }
@@ -102,9 +103,8 @@ struct _Evas_Object_Table_Accessor
   EVAS_OBJECT_TABLE_DATA_GET(o, ptr);					\
   if (!ptr)								\
     {									\
-       fprintf(stderr, "CRITICAL: no widget data for object %p (%s)\n",	\
+       CRIT("No widget data for object %p (%s)",	                \
 	       o, evas_object_type_get(o));				\
-       fflush(stderr);							\
        abort();								\
        return val;							\
     }
@@ -170,9 +170,8 @@ _evas_object_table_cache_alloc(int cols, int rows)
    cache = malloc(size);
    if (!cache)
      {
-	fprintf(stderr,
-		"ERROR: could not allocate table cache %dx%d (%d bytes): %s\n",
-		cols, rows, size, strerror(errno));
+	ERR("Could not allocate table cache %dx%d (%d bytes): %s",
+	      cols, rows, size, strerror(errno));
 	return NULL;
      }
 
@@ -279,16 +278,20 @@ _evas_object_table_calculate_cell(const Evas_Object_Table_Option *opt, Evas_Coor
      cw = opt->min.w;
    else if ((opt->max.w > -1) && (*w > opt->max.w))
      cw = opt->max.w;
-   else
+   else if (opt->fill_h)
      cw = *w;
+   else
+     cw = opt->min.w;
 
    *h -= opt->pad.t + opt->pad.b;
    if (*h < opt->min.h)
      ch = opt->min.h;
    else if ((opt->max.h > -1) && (*h > opt->max.h))
      ch = opt->max.h;
-   else
+   else if (opt->fill_v)
      ch = *h;
+   else
+     ch = opt->min.h;
 
    *x += opt->pad.l;
    if (cw != *w)
@@ -310,22 +313,21 @@ _evas_object_table_calculate_cell(const Evas_Object_Table_Option *opt, Evas_Coor
 /* { */
 /*    if (*align < 0.0) */
 /*      { */
-/* 	/\* assume expand and align to the center. */
-/* 	 * this is compatible with evas_object_box behavior and is the */
-/* 	 * same as weight > 0.0. */
-/* 	 *\/ */
-/* 	*align = 0.5; */
-/* 	return 0; */
+/*	/\* assume expand and align to the center. */
+/*	 * this is compatible with evas_object_box behavior and is the */
+/*	 * same as weight > 0.0. */
+/*	 *\/ */
+/*	*align = 0.5; */
+/*	return 0; */
 /*      } */
 /*    else if (min < 1) */
 /*      { */
-/* 	fprintf(stderr, */
-/* 		"WARNING: child %p [%s, %s] has no minimum width " */
-/* 		"and no %s expand (weight is not > 0.0). " */
-/* 		"Assuming weight > 0.0\n", */
-/* 		child, evas_object_type_get(child), evas_object_name_get(child), */
-/* 		axis_name); */
-/* 	return 0; */
+/*	WRN("Child %p [%s, %s] has no minimum width " */
+/*		"and no %s expand (weight is not > 0.0). " */
+/*		"Assuming weight > 0.0\n", */
+/*		child, evas_object_type_get(child), evas_object_name_get(child), */
+/*		axis_name); */
+/*	return 0; */
 /*      } */
 
 /*    return 1; */
@@ -373,13 +375,13 @@ _evas_object_table_calculate_hints_homogeneous(Evas_Object *o, Evas_Object_Table
 	     opt->expand_h = 1;
 	     expand_h = 1;
 	  }
-/* 	else if ((priv->homogeneous == EVAS_OBJECT_TABLE_HOMOGENEOUS_TABLE) && */
-/* 		 (!_evas_object_table_check_hints_homogeneous_table */
-/* 		  (child, &opt->align.h, opt->min.w, "horizontal"))) */
-/* 	  { */
-/* 	     opt->expand_h = 1; */
-/* 	     expand_h = 1; */
-/* 	  } */
+/*	else if ((priv->homogeneous == EVAS_OBJECT_TABLE_HOMOGENEOUS_TABLE) && */
+/*		 (!_evas_object_table_check_hints_homogeneous_table */
+/*		  (child, &opt->align.h, opt->min.w, "horizontal"))) */
+/*	  { */
+/*	     opt->expand_h = 1; */
+/*	     expand_h = 1; */
+/*	  } */
 
 
 	opt->expand_v = 0;
@@ -390,18 +392,26 @@ _evas_object_table_calculate_hints_homogeneous(Evas_Object *o, Evas_Object_Table
 	     opt->expand_v = 1;
 	     expand_v = 1;
 	  }
-/* 	else if ((priv->homogeneous == EVAS_OBJECT_TABLE_HOMOGENEOUS_TABLE) && */
-/* 		 (!_evas_object_table_check_hints_homogeneous_table */
-/* 		  (child, &opt->align.v, opt->min.h, "vertical"))) */
-/* 	  { */
-/* 	     opt->expand_v = 1; */
-/* 	     expand_v = 1; */
-/* 	  } */
+/*	else if ((priv->homogeneous == EVAS_OBJECT_TABLE_HOMOGENEOUS_TABLE) && */
+/*		 (!_evas_object_table_check_hints_homogeneous_table */
+/*		  (child, &opt->align.v, opt->min.h, "vertical"))) */
+/*	  { */
+/*	     opt->expand_v = 1; */
+/*	     expand_v = 1; */
+/*	  } */
 
+	opt->fill_h = 0;
 	if (opt->align.h < 0.0)
-	  opt->align.h = 0.5;
+	  {
+	     opt->align.h = 0.5;
+	     opt->fill_h = 1;
+	  }
+	opt->fill_v = 0;
 	if (opt->align.v < 0.0)
-	  opt->align.v = 0.5;
+	  {
+	     opt->align.v = 0.5;
+	     opt->fill_v = 1;
+	  }
 
 	/* greatest mininum values, with paddings */
 	if (minw < cell_minw)
@@ -419,16 +429,14 @@ _evas_object_table_calculate_hints_homogeneous(Evas_Object *o, Evas_Object_Table
      {
 	if (o_minw < 1)
 	  {
-	     fputs("ERROR: homogeneous table based on item size but no "
-		   "horizontal mininum size specified! Using expand.\n",
-		   stderr);
+	     ERR("homogeneous table based on item size but no "
+		   "horizontal mininum size specified! Using expand.");
 	     expand_h = 1;
 	  }
 	if (o_minh < 1)
 	  {
-	     fputs("ERROR: homogeneous table based on item size but no "
-		   "vertical mininum size specified! Using expand.\n",
-		   stderr);
+	     ERR("homogeneous table based on item size but no "
+		   "vertical mininum size specified! Using expand.");
 	     expand_v = 1;
 	  }
      }
@@ -629,10 +637,18 @@ _evas_object_table_calculate_hints_regular(Evas_Object *o, Evas_Object_Table_Dat
 	     ((opt->max.h > -1) && (opt->min.h < opt->max.h))))
 	  opt->expand_v = 1;
 
+	opt->fill_h = 0;
 	if (opt->align.h < 0.0)
-	  opt->align.h = 0.5;
+	  {
+	     opt->align.h = 0.5;
+	     opt->fill_h = 1;
+	  }
+	opt->fill_v = 0;
 	if (opt->align.v < 0.0)
-	  opt->align.v = 0.5;
+	  {
+	     opt->align.v = 0.5;
+	     opt->fill_v = 1;
+	  }
 
 	if (opt->expand_h)
 	  memset(c->expands.h + opt->col, 1, opt->colspan);
@@ -730,9 +746,8 @@ _evas_object_table_calculate_layout_regular(Evas_Object *o, Evas_Object_Table_Da
 	cols = malloc(size);
 	if (!cols)
 	  {
-	     fprintf(stderr,
-		     "ERROR: could not allocate temp columns (%d bytes): %s\n",
-		     size, strerror(errno));
+	     ERR("Could not allocate temp columns (%d bytes): %s",
+		   size, strerror(errno));
 	     return;
 	  }
 	memcpy(cols, c->sizes.h, size);
@@ -754,8 +769,7 @@ _evas_object_table_calculate_layout_regular(Evas_Object *o, Evas_Object_Table_Da
 	rows = malloc(size);
 	if (!rows)
 	  {
-	     fprintf(stderr,
-		     "ERROR: could not allocate temp rows (%d bytes): %s\n",
+	     ERR("could not allocate temp rows (%d bytes): %s",
 		     size, strerror(errno));
 	     goto end;
 	  }
@@ -812,7 +826,7 @@ _evas_object_table_smart_add(Evas_Object *o)
 	priv = calloc(1, sizeof(*priv));
 	if (!priv)
 	  {
-	     fputs("ERROR: could not allocate object private data.\n", stderr);
+	     ERR("could not allocate object private data.");
 	     return;
 	  }
 	evas_object_smart_data_set(o, priv);
@@ -870,8 +884,8 @@ _evas_object_table_smart_calculate(Evas_Object *o)
 
    if ((priv->size.cols < 1) || (priv->size.rows < 1))
      {
-	fprintf(stderr, "DBG: nothing to do: cols=%d, rows=%d\n",
-		priv->size.cols, priv->size.rows);
+	DBG("Nothing to do: cols=%d, rows=%d",
+	      priv->size.cols, priv->size.rows);
 	return;
      }
 
@@ -1084,8 +1098,10 @@ evas_object_table_padding_get(const Evas_Object *o, Evas_Coord *horizontal, Evas
 }
 
 /**
- * Add a new child to table.
+ * Add a new child to a table object.
  *
+ * @param o The given table object.
+ * @param child The child object to add.
  * @param col relative-horizontal position to place child.
  * @param row relative-vertical position to place child.
  * @param colspan how many relative-horizontal position to use for this child.
@@ -1096,32 +1112,32 @@ evas_object_table_padding_get(const Evas_Object *o, Evas_Coord *horizontal, Evas
 Eina_Bool
 evas_object_table_pack(Evas_Object *o, Evas_Object *child, unsigned short col, unsigned short row, unsigned short colspan, unsigned short rowspan)
 {
-   EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN_VAL(o, priv, 0);
    Evas_Object_Table_Option *opt;
+
+   EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN_VAL(o, priv, 0);
 
    if (rowspan < 1)
      {
-	fputs("ERROR: rowspan < 1\n", stderr);
+	ERR("rowspan < 1");
 	return EINA_FALSE;
      }
    if (colspan < 1)
      {
-	fputs("ERROR: colspan < 1\n", stderr);
+	ERR("colspan < 1");
 	return EINA_FALSE;
      }
 
    opt = _evas_object_table_option_get(child);
    if (opt)
      {
-	fputs("ERROR: cannot add object that is already part of a table!\n",
-	      stderr);
+	ERR("cannot add object that is already part of a table!");
 	return EINA_FALSE;
      }
 
    opt = malloc(sizeof(*opt));
    if (!opt)
      {
-	fputs("ERROR: could not allocate table option data.\n", stderr);
+	ERR("could not allocate table option data.");
 	return EINA_FALSE;
      }
 
@@ -1219,19 +1235,20 @@ _evas_object_table_remove_opt(Evas_Object_Table_Data *priv, Evas_Object_Table_Op
 Eina_Bool
 evas_object_table_unpack(Evas_Object *o, Evas_Object *child)
 {
-   EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN_VAL(o, priv, 0);
    Evas_Object_Table_Option *opt;
+
+   EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN_VAL(o, priv, 0);
 
    if (o != evas_object_smart_parent_get(child))
      {
-	fputs("ERROR: cannot unpack child from incorrect table!\n", stderr);
+	ERR("cannot unpack child from incorrect table!");
 	return EINA_FALSE;
      }
 
    opt = _evas_object_table_option_del(child);
    if (!opt)
      {
-	fputs("ERROR: cannot unpack child with no packing option!\n", stderr);
+	ERR("cannot unpack child with no packing option!");
 	return EINA_FALSE;
      }
 
@@ -1246,8 +1263,9 @@ evas_object_table_unpack(Evas_Object *o, Evas_Object *child)
 }
 
 /**
- * Faster way to remove all child objects.
+ * Faster way to remove all child objects from a table object.
  *
+ * @param o The given table object.
  * @param clear if true, it will delete just removed children.
  */
 void

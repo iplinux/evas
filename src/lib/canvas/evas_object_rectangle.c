@@ -59,6 +59,7 @@ static const Evas_Object_Func object_func =
      NULL,
      NULL,
      NULL,
+     NULL,
      NULL
 };
 
@@ -206,6 +207,12 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
 	evas_object_render_pre_visible_change(&obj->layer->evas->clip_changes, obj, is_v, was_v);
 	goto done;
      }
+   if ((obj->cur.map != obj->prev.map) ||
+       (obj->cur.usemap != obj->prev.usemap))
+     {
+	evas_object_render_pre_prev_cur_add(&obj->layer->evas->clip_changes, obj);
+        goto done;
+     }
    /* it's not visible - we accounted for it appearing or not so just abort */
    if (!is_v) goto done;
    /* clipper changed this is in addition to anything else for obj */
@@ -261,7 +268,7 @@ evas_object_rectangle_render_pre(Evas_Object *obj)
    /* it obviously didn't change - add a NO obscure - this "unupdates"  this */
    /* area so if there were updates for it they get wiped. don't do it if we */
    /* arent fully opaque and we are visible */
- /*   
+ /*
    if (evas_object_is_visible(obj) &&
        evas_object_is_opaque(obj) &&
        (!obj->clip.clipees))
@@ -293,6 +300,7 @@ evas_object_rectangle_is_opaque(Evas_Object *obj)
 {
    /* this returns 1 if the internal object data implies that the object is */
    /* currently fully opaque over the entire rectangle it occupies */
+   if ((obj->cur.map) && (obj->cur.usemap)) return 0;
    if (obj->cur.render_op == EVAS_RENDER_COPY)
 	return 1;
    if (obj->cur.render_op != EVAS_RENDER_BLEND)

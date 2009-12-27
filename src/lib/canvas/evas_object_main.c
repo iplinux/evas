@@ -26,11 +26,11 @@
 
 
 static Eina_Inlist *
-get_layer_objects_last(Evas_Layer *l)
+get_layer_objects(Evas_Layer *l)
 {
    if( !l || !l->objects ) return NULL;
 
-   return (EINA_INLIST_GET(l->objects))->last;
+   return (EINA_INLIST_GET(l->objects));
 }
 
 /* evas internal stuff */
@@ -82,14 +82,14 @@ void
 evas_object_change(Evas_Object *obj)
 {
    Eina_List *l;
-   Evas_Object *data;
+   Evas_Object *obj2;
 
    obj->layer->evas->changed = 1;
    if (obj->changed) return;
+//   obj->changed = 1;
    evas_render_object_recalc(obj);
    /* set changed flag on all objects this one clips too */
-   EINA_LIST_FOREACH(obj->clip.clipees, l, data)
-     evas_object_change(data);
+   EINA_LIST_FOREACH(obj->clip.clipees, l, obj2) evas_object_change(obj2);
    if (obj->smart.parent) evas_object_change(obj->smart.parent);
 }
 
@@ -172,23 +172,35 @@ void
 evas_object_render_pre_prev_cur_add(Eina_Array *rects, Evas_Object *obj)
 {
    evas_add_rect(rects,
-		 obj->cur.geometry.x,
-		 obj->cur.geometry.y,
-		 obj->cur.geometry.w,
-		 obj->cur.geometry.h);
+                 obj->cur.cache.clip.x,
+                 obj->cur.cache.clip.y,
+                 obj->cur.cache.clip.w,
+                 obj->cur.cache.clip.h);
+   evas_add_rect(rects,
+                 obj->prev.cache.clip.x,
+                 obj->prev.cache.clip.y,
+                 obj->prev.cache.clip.w,
+                 obj->prev.cache.clip.h);
+/*        
+        evas_add_rect(rects,
+                      obj->cur.geometry.x,
+                      obj->cur.geometry.y,
+                      obj->cur.geometry.w,
+                      obj->cur.geometry.h);
 ////	    obj->cur.cache.geometry.x,
 ////	    obj->cur.cache.geometry.y,
 ////	    obj->cur.cache.geometry.w,
 ////	    obj->cur.cache.geometry.h);
-   evas_add_rect(rects,
-		 obj->prev.geometry.x,
-		 obj->prev.geometry.y,
-		 obj->prev.geometry.w,
-		 obj->prev.geometry.h);
+        evas_add_rect(rects,
+                      obj->prev.geometry.x,
+                      obj->prev.geometry.y,
+                      obj->prev.geometry.w,
+                      obj->prev.geometry.h);
 ////	    obj->prev.cache.geometry.x,
 ////	    obj->prev.cache.geometry.y,
 ////	    obj->prev.cache.geometry.w,
 ////	    obj->prev.cache.geometry.h);
+*/
 }
 
 void
@@ -196,10 +208,8 @@ evas_object_clip_changes_clean(Evas_Object *obj)
 {
    Eina_Rectangle *r;
 
-   EINA_LIST_FREE(obj->clip.changes, r)
-     eina_rectangle_free(r);
+   EINA_LIST_FREE(obj->clip.changes, r) eina_rectangle_free(r);
 }
-
 
 void
 evas_object_render_pre_effect_updates(Eina_Array *rects, Evas_Object *obj, int is_v, int was_v)
@@ -383,6 +393,7 @@ evas_object_del(Evas_Object *obj)
    while (obj->clip.clipees) evas_object_clip_unset(obj->clip.clipees->data);
    if (obj->cur.clipper) evas_object_clip_unset(obj);
    if (obj->smart.smart) evas_object_smart_del(obj);
+   evas_object_map_set(obj, NULL);
    evas_object_event_callback_call(obj, EVAS_CALLBACK_FREE, NULL);
    evas_object_smart_cleanup(obj);
    obj->delete_me = 1;
@@ -479,7 +490,7 @@ evas_object_resize(Evas_Object *obj, Evas_Coord w, Evas_Coord h)
    return;
    MAGIC_CHECK_END();
    if (obj->delete_me) return;
-   if (w < 0.0) w = 0.0; if (h < 0.0) h = 0.0;
+   if (w < 0) w = 0; if (h < 0) h = 0;
    if (evas_object_intercept_call_resize(obj, w, h)) return;
 #ifdef FORWARD_NOOP_RESIZES_TO_SMART_OBJS
    if (obj->smart.smart)
@@ -511,14 +522,18 @@ evas_object_resize(Evas_Object *obj, Evas_Coord w, Evas_Coord h)
 					      obj->layer->evas->pointer.x,
 					      obj->layer->evas->pointer.y, 1, 1);
      }
+
    obj->cur.geometry.w = w;
    obj->cur.geometry.h = h;
 ////   obj->cur.cache.geometry.validity = 0;
    evas_object_change(obj);
    evas_object_clip_dirty(obj);
-   evas_object_recalc_clippees(obj);
+   /* NB: evas_object_recalc_clippees was here previously ( < 08/07/2009) */
    if (obj->layer->evas->events_frozen <= 0)
      {
+        /* NB: If this creates glitches on screen then move to above position */
+        evas_object_recalc_clippees(obj);
+
 	//   if (obj->func->coords_recalc) obj->func->coords_recalc(obj);
 	if (!pass)
 	  {
@@ -583,7 +598,7 @@ static void
 _evas_object_size_hint_alloc(Evas_Object *obj)
 {
    if (obj->size_hints) return;
-   
+
    obj->size_hints = calloc(1, sizeof(Evas_Size_Hints));
    obj->size_hints->max.w = -1;
    obj->size_hints->max.h = -1;
@@ -1122,7 +1137,7 @@ evas_object_hide(Evas_Object *obj)
                   if (obj->mouse_in)
                     {
                        Evas_Event_Mouse_Out ev;
-                       
+
                        obj->mouse_in = 0;
                        ev.buttons = obj->layer->evas->pointer.button;
                        ev.output.x = obj->layer->evas->pointer.x;
@@ -1240,9 +1255,10 @@ evas_object_color_get(const Evas_Object *obj, int *r, int *g, int *b, int *a)
 }
 
 /**
- * Sets whether or not the given evas object is to be drawn anti_aliased.
+ * Sets whether or not the given evas object is to be drawn anti-aliased.
+ *
  * @param   obj The given evas object.
- * @param   anti_alias. 1 if the object is to be anti_aliased, 0 otherwise.
+ * @param   anti_alias 1 if the object is to be anti_aliased, 0 otherwise.
  * @ingroup Evas_Object_Group
  */
 EAPI void
@@ -1277,8 +1293,9 @@ evas_object_anti_alias_get(const Evas_Object *obj)
 
 /**
  * Sets the scaling factor for an evas object. Does not affect all objects.
+ *
  * @param   obj The given evas object.
- * @param   scale. The scaling factor. 1.0 == none.
+ * @param   scale The scaling factor. 1.0 == none.
  * @ingroup Evas_Object_Group
  */
 EAPI void
@@ -1300,6 +1317,7 @@ evas_object_scale_set(Evas_Object *obj, double scale)
  * Retrieves the scaling factor for the given evas object.
  * @param   obj The given evas object.
  * @return  The scaling factor.
+ *
  * @ingroup Evas_Object_Group
  */
 EAPI double
@@ -1314,8 +1332,10 @@ evas_object_scale_get(const Evas_Object *obj)
 
 /**
  * Sets the color_space to be used for linear interpolation of colors.
+ *
  * @param   obj The given evas object.
- * @param   color_space, one of EVAS_COLOR_SPACE_ARGB or EVAS_COLOR_SPACE_AHSV.
+ * @param   color_space one of EVAS_COLOR_SPACE_ARGB or EVAS_COLOR_SPACE_AHSV.
+ *
  * @ingroup Evas_Object_Group
  */
 EAPI void
@@ -1326,7 +1346,7 @@ evas_object_color_interpolation_set(Evas_Object *obj, int color_space)
    MAGIC_CHECK_END();
    if (obj->delete_me) return;
    if (obj->cur.interpolation_color_space == color_space)
-   	return;
+	return;
    obj->cur.interpolation_color_space = color_space;
    evas_object_change(obj);
 }
@@ -1362,7 +1382,7 @@ evas_object_render_op_set(Evas_Object *obj, Evas_Render_Op render_op)
    MAGIC_CHECK_END();
    if (obj->delete_me) return;
    if ((Evas_Render_Op)obj->cur.render_op == render_op)
-   	return;
+	return;
    obj->cur.render_op = render_op;
    evas_object_change(obj);
 }
@@ -1396,7 +1416,7 @@ evas_object_evas_get(const Evas_Object *obj)
    MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
    return NULL;
    MAGIC_CHECK_END();
-   if (obj->delete_me) return 0;
+   if (obj->delete_me) return NULL;
    return obj->layer->evas;
 }
 
@@ -1406,9 +1426,14 @@ evas_object_evas_get(const Evas_Object *obj)
  */
 
 /**
- * To be documented.
- *
- * FIXME: To be fixed.
+ * Retrieves the top object at the given position (x,y)
+ * @param   e The given evas object.
+ * @param   x The horizontal coordinate
+ * @param   y The vertical coordinate
+ * @param   include_pass_events_objects Boolean Flag to include or not
+ * pass events objects
+ * @param   include_hidden_objects Boolean Flag to include or not hidden objects
+ * @return  The evas object that is over all others objects at the given position.
  */
 EAPI Evas_Object *
 evas_object_top_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
@@ -1427,7 +1452,7 @@ evas_object_top_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool i
      {
 	Evas_Object *obj;
 
-	EINA_INLIST_REVERSE_FOREACH(get_layer_objects_last(lay), obj)
+	EINA_INLIST_REVERSE_FOREACH(get_layer_objects(lay), obj)
 	  {
 	     if (obj->delete_me) continue;
 	     if ((!include_pass_events_objects) && (evas_event_passes_through(obj))) continue;
@@ -1442,9 +1467,10 @@ evas_object_top_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool i
 }
 
 /**
- * To be documented.
- *
- * FIXME: To be fixed.
+ * Retrieves the top object at mouse pointer position
+ * @param   e The given evas object.
+ * @return The evas object that is over all others objects at the
+ * pointer position.
  */
 EAPI Evas_Object *
 evas_object_top_at_pointer_get(const Evas *e)
@@ -1454,9 +1480,16 @@ evas_object_top_at_pointer_get(const Evas *e)
 }
 
 /**
- * To be documented.
+ * Retrieves the top object in the given rectangle region
+ * @param   e The given evas object.
+ * @param   x The horizontal coordinate.
+ * @param   y The vertical coordinate.
+ * @param   w The width size.
+ * @param   h The height size.
+ * @param   include_pass_events_objects Boolean Flag to include or not pass events objects
+ * @param   include_hidden_objects Boolean Flag to include or not hidden objects
+ * @return  The evas object that is over all others objects at the pointer position.
  *
- * FIXME: To be fixed.
  */
 EAPI Evas_Object *
 evas_object_top_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
@@ -1481,7 +1514,7 @@ evas_object_top_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas
      {
 	Evas_Object *obj;
 
-	EINA_INLIST_REVERSE_FOREACH(get_layer_objects_last(lay), obj)
+	EINA_INLIST_REVERSE_FOREACH(get_layer_objects(lay), obj)
 	  {
 	     if (obj->delete_me) continue;
 	     if ((!include_pass_events_objects) && (evas_event_passes_through(obj))) continue;
@@ -1496,9 +1529,15 @@ evas_object_top_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas
 }
 
 /**
- * To be documented.
+ * Retrieves the objects at the given position
+ * @param   e The given evas object.
+ * @param   x The horizontal coordinate.
+ * @param   y The vertical coordinate.
+ * @param include_pass_events_objects Boolean Flag to include or not
+ * pass events objects
+ * @param   include_hidden_objects Boolean Flag to include or not hidden objects
+ * @return  The list of evas objects at the pointer position.
  *
- * FIXME: To be fixed.
  */
 EAPI Eina_List *
 evas_objects_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
@@ -1518,7 +1557,7 @@ evas_objects_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool incl
      {
 	Evas_Object *obj;
 
-	EINA_INLIST_REVERSE_FOREACH(get_layer_objects_last(lay), obj)
+	EINA_INLIST_REVERSE_FOREACH(get_layer_objects(lay), obj)
 	  {
 	     if (obj->delete_me) continue;
 	     if ((!include_pass_events_objects) && (evas_event_passes_through(obj))) continue;
@@ -1536,6 +1575,18 @@ evas_objects_at_xy_get(const Evas *e, Evas_Coord x, Evas_Coord y, Eina_Bool incl
  * To be documented.
  *
  * FIXME: To be fixed.
+ */
+/**
+ * Retrieves the objects in the given rectangle region
+ * @param   e The given evas object.
+ * @param   x The horizontal coordinate.
+ * @param   y The vertical coordinate.
+ * @param   w The width size.
+ * @param   h The height size.
+ * @param   include_pass_events_objects Boolean Flag to include or not pass events objects
+ * @param   include_hidden_objects Boolean Flag to include or not hidden objects
+ * @return  The list of evas object in the rectangle region.
+ *
  */
 EAPI Eina_List *
 evas_objects_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Coord w, Evas_Coord h, Eina_Bool include_pass_events_objects, Eina_Bool include_hidden_objects)
@@ -1561,7 +1612,7 @@ evas_objects_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Co
      {
 	Evas_Object *obj;
 
-	EINA_INLIST_REVERSE_FOREACH(get_layer_objects_last(lay), obj)
+	EINA_INLIST_REVERSE_FOREACH(get_layer_objects(lay), obj)
 	  {
 	     if (obj->delete_me) continue;
 	     if ((!include_pass_events_objects) && (evas_event_passes_through(obj))) continue;
