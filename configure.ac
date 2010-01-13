@@ -1160,7 +1160,7 @@ AC_MSG_CHECKING(whether to build 8bpp grayscale 64-palette converter code)
 AC_ARG_ENABLE(convert-8-grayscale-64,
   AC_HELP_STRING([--disable-convert-8-grayscale-64], [disable 8bpp grayscale 64-palette converter code]),
   [
-     if test "$enableval" = "xyes"; then
+     if test "x$enableval" = "xyes"; then
        AC_DEFINE(BUILD_CONVERT_8_GRAYSCALE_64, 1, [8bpp Grayscale 64-palette Converter Support])
        conv_8_grayscale_64="yes"
      else
