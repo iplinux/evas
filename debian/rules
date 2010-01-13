@@ -10,40 +10,47 @@ LDFLAGS += -fvisibility=hidden
 
 DEB_DH_STRIP_ARGS := --dbg-package=libevas-dbg
 
-ifeq (hppa,$(DEB_HOST_ARCH))
-	arch_flags += --disable-pthreads
-else
-	arch_flags += --enable-pthreads
-endif
-
 ifeq (amd64,$(DEB_HOST_ARCH))
 	arch_flags += --enable-cpu-sse
 endif
 
-DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) \
-	--enable-strict \
+DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
+	--disable-doc \
 	--enable-fontconfig \
+	--enable-fribidi \
+	--disable-evas-cserve \
+	--enable-buffer=static \
 	--disable-software-xlib \
-	--disable-software-16-x11 \
-	--enable-software-xcb \
-	--disable-fb \
-	--enable-buffer \
-	--disable-gl-x11 \
 	--disable-xrender-x11 \
+	--disable-gl-x11 \
+	--enable-software-xcb=static \
+	--disable-xrender-xcb \
+	--disable-software-sdl \
+	--disable-fb \
 	--disable-directfb \
+	--disable-software-16-x11 \
+	--enable-static-software-generic \
+	--disable-image-loader-edb \
+	--enable-image-loader-eet=static \
+	--disable-font-loader-eet \
 	--enable-image-loader-gif \
-	--enable-image-loader-png \
 	--enable-image-loader-jpeg \
-	--enable-image-loader-eet \
-	--enable-font-loader-eet \
 	--disable-image-loader-pmaps \
+	--enable-image-loader-png=static \
+	--disable-image-loader-svg \
 	--disable-image-loader-tiff \
 	--enable-image-loader-xpm \
-	--disable-image-loader-svg \
+	--enable-pthreads \
+	--disable-pipe-render \
+	--disable-async-events \
+	--disable-async-preload \
+	--enable-cpu-c \
+	--disable-evas-magic-debug \
 	--enable-scale-sample \
 	--enable-scale-smooth \
-	--enable-convert-yuv \
+	--disable-convert-yuv \
 	--disable-small-dither-mask \
+	--disable-line-dither-mask \
 	--enable-no-dither-mask \
 	--enable-convert-8-rgb-332 \
 	--enable-convert-8-rgb-666 \
@@ -71,9 +78,10 @@ DEB_CONFIGURE_EXTRA_FLAGS := --host=$(DEB_HOST_GNU_TYPE) \
 	--enable-convert-32-rgb-rot-180 \
 	--enable-convert-32-rgb-rot-270 \
 	--enable-convert-32-rgb-rot-90 \
-	--disable-image-loader-edb \
-	--enable-doc \
-	--disable-rpath $(arch_flags)
+	--enable-convert-8-gry-1 \
+	--enable-convert-8-gry-16 \
+	--enable-convert-8-grayscale-64 \
+	--host=$(DEB_HOST_GNU_TYPE)
 
 clean::
 	[ ! -f Makefile ] || make distclean
