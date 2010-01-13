@@ -1,3 +1,9 @@
+evas (0.9.9.063-1) zelazny; urgency=low
+
+  * svn-05 snapshot
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Thu, 14 Jan 2010 01:52:29 +0600
+
 evas (0.9.9.062-4) asimov; urgency=low
 
   * Do not try to call free(3) on segment allocated by shmget(3) in XCB
