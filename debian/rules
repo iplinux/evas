@@ -40,7 +40,7 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 	--disable-image-loader-svg \
 	--disable-image-loader-tiff \
 	--enable-image-loader-xpm \
-	--enable-pthreads \
+	--disable-pthreads \
 	--disable-pipe-render \
 	--disable-async-events \
 	--disable-async-preload \
