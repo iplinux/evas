@@ -7,13 +7,13 @@ Build-Depends: debhelper (>= 6), cdbs, pkg-config, automake, libtool, libeet-dev
 Standards-Version: 3.8.2
 Homepage: http://www.enlightenment.org
 XCS-Cross-Host-Build-Depends: debhelper (>= 6), cdbs, cdbs-embedded, pkg-config, automake, libtool
-XCS-Cross-Build-Depends: libeet-dev (>= 1.1.0), libeina-dev (>= 0.0.2.62-1), libfreetype6-dev, libpng12-dev | libpng-dev, libz1-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
+XCS-Cross-Build-Depends: libeet-dev (>= 1.1.0), libeina-dev (>= 0.0.2.63-1), libfreetype6-dev, libpng12-dev | libpng-dev, libz1-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
 XS-Vcs-Git: git://git.iplinux.org/evas.git
 XS-Vcs-Browser: http://git.iplinux.org/evas.git
 
-Package: libevas-svn-03
+Package: libevas-svn-05
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libevas-engines (>= 0.9.9.062-1)
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Provides: libevas0
 Conflicts: libevas0
 Description: Enlightenment DR17 advanced canvas library
@@ -29,8 +29,7 @@ Description: Enlightenment DR17 advanced canvas library
 Package: libevas-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libevas-svn-03 (= ${binary:Version}), libjpeg62-dev,
- libfreetype6-dev, libfontconfig1-dev, libeet-dev, libeina-dev (>= 0.0.2.062-1)
+Depends: ${misc:Depends}, libevas-svn-05 (= ${binary:Version}), libeina-dev (>= 0.0.2.063-1)
 Description: Enlightenment DR17 advanced canvas library development files
  Evas is an advanced canvas library, providing six engines for rendering: X11,
  OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
@@ -44,7 +43,7 @@ Description: Enlightenment DR17 advanced canvas library development files
 Package: libevas-dbg
 Architecture: any
 Section: debug
-Depends: ${misc:Depends}, libevas-svn-03 (= ${binary:Version})
+Depends: ${misc:Depends}, libevas-svn-05 (= ${binary:Version})
 Priority: extra
 Description: enlightenment advanced canvas library
  Evas is an advanced canvas library, providing six engines for rendering: X11,
@@ -55,19 +54,3 @@ Description: enlightenment advanced canvas library
  to provide a backtrace with names in a debugger, this makes it somewhat
  easier to interpret core dumps. The libraries are installed in
  /usr/lib/debug and are automatically used by gdb.
-
-Package: libevas-engines
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Provides: libevas-engine-buffer, libevas-engine-software-generic, libevas-engine-software-xcb
-Replaces: libevas-engine-buffer, libevas-engine-software-generic, libevas-engine-software-xcb
-Description: package providing important Evas engine modules
- Evas is an advanced canvas library, providing six engines for rendering: X11,
- OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
- and Qtopia.
- Due to its simple API, evas can be developed with rapidly, and cleanly.
- .
- This package contains the following Evas engine modules:
-  - buffer
-  - software/genenric
-  - software/XCB
