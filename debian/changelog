@@ -1,3 +1,10 @@
+evas (0.9.9.063-4) zelazny; urgency=low
+
+  * Add whole lot of other dependencies to libevas-dev to shut up
+    pkg-config
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Thu, 14 Jan 2010 08:40:38 +0600
+
 evas (0.9.9.063-3) zelazny; urgency=low
 
   * Add libfontconfig1-dev dependency to libevas-dev to shut up
