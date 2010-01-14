@@ -29,7 +29,7 @@ Description: Enlightenment DR17 advanced canvas library
 Package: libevas-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libevas-svn-05 (= ${binary:Version}), libeina-dev (>= 0.0.2.063-1)
+Depends: ${misc:Depends}, libevas-svn-05 (= ${binary:Version}), libeina-dev (>= 0.0.2.063-1), libfontconfig1-dev
 Description: Enlightenment DR17 advanced canvas library development files
  Evas is an advanced canvas library, providing six engines for rendering: X11,
  OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
