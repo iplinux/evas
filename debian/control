@@ -3,11 +3,11 @@ Section: gui
 Priority: optional
 Maintainer: Mikhail Gusarov <dottedmag@dottedmag.net>
 Uploaders: Alexander Kerner <lunohod@openinkpot.org>
-Build-Depends: debhelper (>= 6), cdbs, pkg-config, automake, libtool, libeet-dev (>= 1.1.0), libeina-dev (>= 0.0.2.63-1), libfreetype6-dev, libpng12-dev | libpng-dev, zlib1g-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
+Build-Depends: debhelper (>= 6), cdbs, pkg-config, automake, libtool, libeet-dev (>= 1.1.0), libeina-dev (>= 0.0.2.63-4), libfreetype6-dev, libpng12-dev | libpng-dev, zlib1g-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
 Standards-Version: 3.8.2
 Homepage: http://www.enlightenment.org
 XCS-Cross-Host-Build-Depends: debhelper (>= 6), cdbs, cdbs-embedded, pkg-config, automake, libtool
-XCS-Cross-Build-Depends: libeet-dev (>= 1.1.0), libeina-dev (>= 0.0.2.63-1), libfreetype6-dev, libpng12-dev | libpng-dev, libz1-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
+XCS-Cross-Build-Depends: libeet-dev (>= 1.1.0), libeina-dev (>= 0.0.2.63-4), libfreetype6-dev, libpng12-dev | libpng-dev, libz1-dev, libjpeg62-dev, libxcb1-dev, libxcb-image0-dev, libxcb-render0-dev, libpixman-1-dev, libgif-dev, libfontconfig1-dev
 XS-Vcs-Git: git://git.iplinux.org/evas.git
 XS-Vcs-Browser: http://git.iplinux.org/evas.git
 
@@ -29,7 +29,7 @@ Description: Enlightenment DR17 advanced canvas library
 Package: libevas-dev
 Section: libdevel
 Architecture: any
-Depends: ${misc:Depends}, libevas-svn-05 (= ${binary:Version}), libeina-dev (>= 0.0.2.063-1), libfontconfig1-dev, libpng12-dev, libeet-dev, libxcb1-dev, libxcb-image0-dev, libpixman-1-dev, libfreetype6-dev
+Depends: ${misc:Depends}, libevas-svn-05 (= ${binary:Version}), libeina-dev (>= 0.0.2.063-4), libfontconfig1-dev, libpng12-dev, libeet-dev, libxcb1-dev, libxcb-image0-dev, libpixman-1-dev, libfreetype6-dev
 Description: Enlightenment DR17 advanced canvas library development files
  Evas is an advanced canvas library, providing six engines for rendering: X11,
  OpenGL (hardware accelerated), DirectFB, the framebuffer, Microsoft Windows
