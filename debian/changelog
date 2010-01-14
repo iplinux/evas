@@ -1,3 +1,10 @@
+evas (0.9.9.063-5) zelazny; urgency=low
+
+  * Rebuild with updated eina to neutralize effect of EINA_ARG_NONNULL
+  * Fix prototype of eina_textblock_style_set: second argument can be NULL
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Fri, 15 Jan 2010 05:19:41 +0600
+
 evas (0.9.9.063-4) zelazny; urgency=low
 
   * Add whole lot of other dependencies to libevas-dev to shut up
