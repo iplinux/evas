@@ -1,3 +1,9 @@
+evas (0.9.9.063-6) zelazny; urgency=low
+
+  * Build host/tools package (OI#49)
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Wed, 20 Jan 2010 12:06:19 +0600
+
 evas (0.9.9.063-5) zelazny; urgency=low
 
   * Rebuild with updated eina to neutralize effect of EINA_ARG_NONNULL
