@@ -86,3 +86,12 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 clean::
 	[ ! -f Makefile ] || make distclean
 	rm -f evas-*.tar.bz2 evas-*.cdbs-config_list
+	[ ! -f debian/control.orig ] || mv -f debian/control.orig debian/control
+
+binary-install/libevas-dev::
+	[ -f debian/control.orig ] || cp debian/control debian/control.orig
+ifeq (,$(findstring target,$(DEB_BUILD_OPTIONS)))
+	sed -ie 's,Section: .*,Section: host/tools,g' $(CURDIR)/debian/control
+else
+	sed -ie 's,Section: host/tools,Section: core,g' $(CURDIR)/debian/control
+endif
