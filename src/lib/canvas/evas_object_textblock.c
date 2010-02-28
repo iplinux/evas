@@ -1364,35 +1364,19 @@ _layout_format_ascent_descent_adjust(Ctxt *c, Evas_Object_Textblock_Format *fmt)
 //	ascent = c->ENFN->font_max_ascent_get(c->ENDT, fmt->font.font);
 //	descent = c->ENFN->font_max_descent_get(c->ENDT, fmt->font.font);
         ascent = c->ENFN->font_ascent_get(c->ENDT, fmt->font.font);
-	descent = c->ENFN->font_descent_get(c->ENDT, fmt->font.font);
+        descent = c->ENFN->font_descent_get(c->ENDT, fmt->font.font);
         if (fmt->linesize > 0)
           {
-             if ((ascent + descent) < fmt->linesize)
-               {
-                  ascent = ((fmt->linesize * ascent) / (ascent + descent));
-                  descent = fmt->linesize - ascent;
-               }
+             ascent = ((fmt->linesize * ascent) / (ascent + descent));
+             descent = fmt->linesize - ascent;
           }
         else if (fmt->linerelsize > 0.0)
           {
              descent = ((ascent + descent) * fmt->linerelsize) - (ascent * fmt->linerelsize);
              ascent = ascent * fmt->linerelsize;
           }
-        c->maxdescent += fmt->linegap;
-        c->maxdescent += ((ascent + descent) * fmt->linerelgap);
-	if (c->maxascent < ascent) c->maxascent = ascent;
-	if (c->maxdescent < descent) c->maxdescent = descent;
-        if (fmt->linefill > 0.0)
-          {
-             int dh;
-             
-             dh = c->obj->cur.geometry.h - (c->maxascent + c->maxdescent);
-             if (dh < 0) dh = 0;
-             dh = fmt->linefill * dh;
-             c->maxdescent += dh / 2;
-             c->maxascent += dh - (dh / 2);
-             // FIXME: set flag that says "if heigh changes - reformat"
-          }
+        c->maxascent = ascent;
+        c->maxdescent = descent;
      }
 }
 
