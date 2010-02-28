@@ -1,3 +1,10 @@
+evas (0.9.9.063-7) zelazny; urgency=low
+
+  * Allow using linesize/linerelsize in TEXTBLOCK styles to reduce line
+    spacing.
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Mon, 01 Mar 2010 03:26:40 +0600
+
 evas (0.9.9.063-6) zelazny; urgency=low
 
   * Build host/tools package (OI#49)
