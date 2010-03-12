@@ -366,6 +366,7 @@ evas_common_font_int_load_complete(RGBA_Font_Int *fi)
 	FT_Activate_Size(fi->ft.size);
      }
    fi->real_size = fi->size * 64;
+
    error = FT_Set_Char_Size(fi->src->ft.face, 0, fi->real_size, 75, 75);
    if (error)
      {
