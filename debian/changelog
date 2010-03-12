@@ -1,3 +1,10 @@
+evas (0.9.9.063-8) zelazny; urgency=low
+
+  * Fix a lot of bugs in fonts handling and Text/Textblock rendering
+    (OI#675)
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Sat, 13 Mar 2010 01:30:44 +0600
+
 evas (0.9.9.063-7) zelazny; urgency=low
 
   * Allow using linesize/linerelsize in TEXTBLOCK styles to reduce line
