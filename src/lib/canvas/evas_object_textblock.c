@@ -690,6 +690,7 @@ _prepend_text_run(Evas_Object_Textblock *o, char *s, char *p)
      }
 }
 
+/* {{{ Format parsing / handling */
 
 static int
 _hex_string_get(char ch)
@@ -1307,7 +1308,7 @@ _format_dup(Evas_Object *obj, Evas_Object_Textblock_Format *fmt)
    return fmt2;
 }
 
-
+/* }}} */
 
 
 
@@ -1346,10 +1347,11 @@ _layout_format_ascent_descent_adjust(Ctxt *c, Evas_Object_Textblock_Format *fmt,
 
    if (fmt->font.font)
      {
-//	ascent = c->ENFN->font_max_ascent_get(c->ENDT, fmt->font.font);
-//	descent = c->ENFN->font_max_descent_get(c->ENDT, fmt->font.font);
+        int height = evas_common_font_get_line_advance(fmt->font.font);
+
         ascent = c->ENFN->font_ascent_get(c->ENDT, fmt->font.font);
         descent = c->ENFN->font_descent_get(c->ENDT, fmt->font.font);
+
         if (fmt->linesize > 0)
           {
              ascent = ((fmt->linesize * ascent) / (ascent + descent));
@@ -1443,13 +1445,17 @@ _layout_line_finish(Ctxt* c, Evas_Object_Textblock_Format *fmt)
    Evas_Object_Textblock_Item *it;
    Evas_Object_Textblock_Format_Item *fi;
 
+   /* Line to be layed out */
+   Evas_Object_Textblock_Line *line = c->ln;
+
    /* Calculate maxascent, maxdescent for current line */
    int maxascent = 0;
    int maxdescent = 0;
 
-   if (!c->ln->items)
+   /* FIXME: make sure there is at least one item in each line? */
+   if (!line->items)
       _layout_format_ascent_descent_adjust(c, fmt, &maxascent, &maxdescent);
-   EINA_INLIST_FOREACH(c->ln->items, it)
+   EINA_INLIST_FOREACH(line->items, it)
       _layout_format_ascent_descent_adjust(c, it->format, &maxascent, &maxdescent);
 
    /*
@@ -1513,23 +1519,22 @@ _layout_line_finish(Ctxt* c, Evas_Object_Textblock_Format *fmt)
    */
 
    /* Fill in baseline for each textblock item */
-   EINA_INLIST_FOREACH(c->ln->items, it)
+   EINA_INLIST_FOREACH(line->items, it)
       if (it->format->font.font)
-         it->baseline = c->ENFN->font_max_ascent_get(c->ENDT, it->format->font.font);
+         it->baseline = c->ENFN->font_ascent_get(c->ENDT, it->format->font.font);
 
    /* Calculate width of line */
-   EINA_INLIST_FOREACH(c->ln->items, it)
-      if (it->x + it->w + c->ln->w) c->ln->w = it->x + it->w;
+   EINA_INLIST_FOREACH(line->items, it)
+      if (it->x + it->w > line->w) line->w = it->x + it->w;
 
    /* Adjust (?) line vertical position */
->>>>>>> b83f198... evas_textblock: Make maxascent/maxdescent variables local.
-   c->ln->y = c->y + c->o->style_pad.t;
+   line->y = c->y + c->o->style_pad.t;
 
    /* Calculate line height */
-   c->ln->h = maxascent + maxdescent;
+   line->h = maxascent + maxdescent;
 
    /* Calculate (???) line baseline */
-   c->ln->baseline = maxascent;
+   line->baseline = maxascent;
 
    /* Calculate adjustments for underline */
    if (c->have_underline2)
@@ -1542,23 +1547,23 @@ _layout_line_finish(Ctxt* c, Evas_Object_Textblock_Format *fmt)
      }
 
    /* Store current line number */
-   c->ln->line_no = c->line_no;
+   line->line_no = c->line_no;
    c->line_no++;
 
    /* Calculate current position in context for next line */
-   c->y += c->ln->h;
+   c->y += line->h;
 
    /* Calculate line horizontal position and c->wmax */
 
      /* If there is no width, align left */
    double align = c->w >= 0 ? c->align : 0.0;
 
-   c->ln->x = c->marginl + c->o->style_pad.l +
-      ((c->w - c->ln->w -
+   line->x = c->marginl + c->o->style_pad.l +
+      ((c->w - line->w -
         c->o->style_pad.l - c->o->style_pad.r -
         c->marginl - c->marginr) * c->align);
-   if ((c->ln->x + c->ln->w + c->marginr - c->o->style_pad.l) > c->wmax)
-      c->wmax = c->ln->x + c->ln->w + c->marginl + c->marginr - c->o->style_pad.l;
+   if ((line->x + line->w + c->marginr - c->o->style_pad.l) > c->wmax)
+      c->wmax = line->x + line->w + c->marginl + c->marginr - c->o->style_pad.l;
 }
 
 
@@ -1919,8 +1924,9 @@ _layout_text_append(Ctxt *c, Evas_Object_Textblock_Format *fmt, Evas_Object_Text
 
         /* Get width/height of text being rasterized "as if there were no constraints" */
 	tw = th = 0;
-	if (fmt->font.font)
+	if (fmt->font.font) {
 	  c->ENFN->font_string_size_get(c->ENDT, fmt->font.font, it->text, &tw, &th);
+        }
 
         /*
          * Split text to fill the current line
@@ -3386,6 +3392,8 @@ evas_object_textblock_text_markup_get(const Evas_Object *obj)
    return o->markup_text;
 }
 
+/* {{{ Cursors */
+
 /* cursors */
 /**
  * to be documented.
@@ -3899,6 +3907,8 @@ evas_textblock_cursor_text_append(Evas_Textblock_Cursor *cur, const char *text)
    int index, ch;
 
    if (!cur) return;
+
+   /* Adjust cursors pointing to the same Node */
    o = (Evas_Object_Textblock *)(cur->obj->object_data);
    if (text)
      {
@@ -3919,6 +3929,11 @@ evas_textblock_cursor_text_append(Evas_Textblock_Cursor *cur, const char *text)
 	       }
 	  }
      }
+
+   /*
+    * If current node is nonexisting (aka cur points to EOF) or FORMAT one, make
+    * a text node and insert it in right place
+    */
    n = cur->node;
    if ((!n) || (n->type == NODE_FORMAT))
      {
@@ -3932,8 +3947,14 @@ evas_textblock_cursor_text_append(Evas_Textblock_Cursor *cur, const char *text)
 									       EINA_INLIST_GET(nrel));
 	else
 	  o->nodes = (Evas_Object_Textblock_Node *)eina_inlist_append(EINA_INLIST_GET(o->nodes), EINA_INLIST_GET(n));
+
+        /*
+         * Adjust cur to point to newly created node
+         */
+        cur->node = n;
      }
-   cur->node = n;
+
+   /* Single-character advance?! */
    index = cur->pos;
    if (eina_strbuf_length_get(n->text))
      {
@@ -3977,6 +3998,8 @@ evas_textblock_cursor_text_prepend(Evas_Textblock_Cursor *cur, const char *text)
    Evas_Object_Textblock_Node *n, *nrel;
 
    if (!cur) return;
+
+   /* Adjust cursors pointing to the same Node */
    o = (Evas_Object_Textblock *)(cur->obj->object_data);
      {
 	Eina_List *l;
@@ -3988,6 +4011,7 @@ evas_textblock_cursor_text_prepend(Evas_Textblock_Cursor *cur, const char *text)
 	       {
 		  if (cur->node == data->node)
 		    {
+                        /* FIXME: Why not in _append? */
 		       if (data->node &&
 			   (data->node->type == NODE_TEXT) &&
 			   (data->pos >= cur->pos))
@@ -3998,6 +4022,11 @@ evas_textblock_cursor_text_prepend(Evas_Textblock_Cursor *cur, const char *text)
 	       }
 	  }
      }
+
+   /*
+    * If current node is nonexisting (aka cur points to EOF) or FORMAT one, make
+    * a text node and insert it in right place
+    */
    n = cur->node;
    if ((!n) || (n->type == NODE_FORMAT))
      {
@@ -4011,9 +4040,13 @@ evas_textblock_cursor_text_prepend(Evas_Textblock_Cursor *cur, const char *text)
 										EINA_INLIST_GET(nrel));
 	else
 	  o->nodes = (Evas_Object_Textblock_Node *)eina_inlist_prepend(EINA_INLIST_GET(o->nodes), EINA_INLIST_GET(n));
+
+        /*
+         * Adjust cur to point to newly created node
+         */
+        cur->node = n;
      }
    if (!n->text) n->text = eina_strbuf_new();
-   cur->node = n;
    
    if (text)
      {
@@ -5261,6 +5294,7 @@ evas_textblock_cursor_eol_set(Evas_Textblock_Cursor *cur, Eina_Bool eol)
    cur->eol = eol;
 }
 
+/* }}} */
 
 /* general controls */
 /**
@@ -5541,6 +5575,36 @@ evas_object_textblock_render(Evas_Object *obj, void *output, void *context, void
 #define ITEM_WALK_LINE_SKIP_DROP() \
    if ((ln->y + ln->h) <= 0) continue; \
    if (ln->y > obj->cur.geometry.h) break
+
+#ifdef DEBUG_TEXTBLOCK
+   ITEM_WALK();
+
+   ENFN->context_color_set(output, context,
+                           0, 0, 255, 255);
+   ENFN->rectangle_draw(output, context, surface,
+                        obj->cur.geometry.x + ln->x + x,
+                        obj->cur.geometry.y + ln->y + y,
+                        ln->w, 1);
+   ENFN->rectangle_draw(output, context, surface,
+                        obj->cur.geometry.x + ln->x + x,
+                        obj->cur.geometry.y + ln->y + y,
+                        1, ln->h);
+   ENFN->rectangle_draw(output, context, surface,
+                        obj->cur.geometry.x + ln->x + x,
+                        obj->cur.geometry.y + ln->y + y + ln->h - 1,
+                        ln->w, 1);
+   ENFN->rectangle_draw(output, context, surface,
+                        obj->cur.geometry.x + ln->x + x + ln->w - 1,
+                        obj->cur.geometry.y + ln->y + y,
+                        1, ln->h);
+   ENFN->context_color_set(output, context, 255, 0, 0, 255);
+   ENFN->rectangle_draw(output, context, surface,
+                        obj->cur.geometry.x + ln->x + x,
+                        obj->cur.geometry.y + ln->y + y + ln->baseline,
+                        ln->w, 1);
+
+   ITEM_WALK_END();
+#endif
 
    pback = 0;
    /* backing */
@@ -5869,6 +5933,7 @@ evas_object_textblock_render(Evas_Object *obj, void *output, void *context, void
 	a2 = it->format->color.underline2.a;
      }
    ITEM_WALK_END();
+
 }
 
 static void

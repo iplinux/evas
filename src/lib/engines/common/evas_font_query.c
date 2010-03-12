@@ -60,76 +60,77 @@ evas_common_font_query_kerning(RGBA_Font_Int* fi,
 EAPI void
 evas_common_font_query_size(RGBA_Font *fn, const char *text, int *w, int *h)
 {
-   int use_kerning;
-   int pen_x, pen_y;
-   int start_x, end_x;
-   int chr;
-   FT_UInt prev_index;
-   RGBA_Font_Int *fi;
-   FT_Face pface = NULL;
+    RGBA_Font_Int *fi = fn->fonts->data;
 
-   fi = fn->fonts->data;
+    int end_x = 0;
+    FT_UInt prev_index = 0;
+    Eina_Bool use_kerning = FT_HAS_KERNING(fi->src->ft.face);;
 
-   start_x = 0;
-   end_x = 0;
+#ifdef DEBUG_TEXTBLOCK
+    fprintf(stderr, "evas_common_font_query_size\n");
+#endif
 
-   pen_x = 0;
-   pen_y = 0;
-//   evas_common_font_size_use(fn);
-   use_kerning = FT_HAS_KERNING(fi->src->ft.face);
-   prev_index = 0;
-   for (chr = 0; text[chr];)
-     {
-	FT_UInt index;
-	RGBA_Font_Glyph *fg;
-	int chr_x, chr_y, chr_w;
-        int gl, kern;
+    int chr;
+    for (chr = 0; text[chr];) {
+        int gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
+        if (gl == 0)
+            break;
 
-	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
-	if (gl == 0) break;
-	index = evas_common_font_glyph_search(fn, &fi, gl);
-	LKL(fi->ft_mutex);
+        FT_UInt index = evas_common_font_glyph_search(fn, &fi, gl);
+        LKL(fi->ft_mutex);
         if (fi->src->current_size != fi->size)
-          {
-             FT_Activate_Size(fi->ft.size);
-             fi->src->current_size = fi->size;
-          }
-      /* hmmm kerning means i can't sanely do my own cached metric tables! */
-	/* grrr - this means font face sharing is kinda... not an option if */
-	/* you want performance */
-	kern = 0;
-	if ((use_kerning) && (prev_index) && (index) &&
-	    (pface == fi->src->ft.face))
-	  if (evas_common_font_query_kerning(fi, prev_index, index, &kern))
-	    pen_x += kern;
+        {
+            FT_Activate_Size(fi->ft.size);
+            fi->src->current_size = fi->size;
+        }
+        RGBA_Font_Glyph *fg = evas_common_font_int_cache_glyph_get(fi, index);
+        int chr_w = fg->glyph->advance.x >> 16;
 
-	pface = fi->src->ft.face;
-	fg = evas_common_font_int_cache_glyph_get(fi, index);
-	LKU(fi->ft_mutex);
-	if (!fg) continue;
+#ifdef DEBUG_TEXTBLOCK
+        fprintf(stderr, "U+%d\n", gl);
+        fprintf(stderr, " -> Glyph advance is %d\n", fg->glyph->advance.x >> 16);
+        fprintf(stderr, " -> Width of glyph bitmap is %d pixels\n", fg->glyph_out->bitmap.width);
+#endif
 
-	if (kern < 0) kern = 0;
-	chr_x = ((pen_x - kern) + (fg->glyph_out->left));
-	chr_y = (pen_y + (fg->glyph_out->top));
-//	chr_w = fg->glyph_out->bitmap.width;
-	chr_w = fg->glyph_out->bitmap.width + kern;
-	  {
-	     int advw;
+        if (prev_index) {
+            /* If there is previous glyph, use kerning. */
+            if (use_kerning) {
+                int kern;
+                if (evas_common_font_query_kerning(fi, prev_index, index, &kern)) {
+#ifdef DEBUG_TEXTBLOCK
+                    fprintf(stderr, " -> Adjusting width for %d pixels, kerning\n", kern);
+#endif
+                    chr_w += kern;
+                }
+            }
+        } else {
+            /* It's a first glyph, so subtract left-side bearing from the
+             * width */
+            chr_w -= fg->glyph_out->left;
+#ifdef DEBUG_TEXTBLOCK
+            fprintf(stderr, " -> Adjusting width for %d pixels, left bearing of first glyph\n", fg->glyph_out->left);
+#endif
+        }
 
-	     advw = ((fg->glyph->advance.x + (kern << 16)) >> 16);
-	     if (chr_w < advw) chr_w = advw;
-	  }
+        end_x += chr_w;
+        prev_index = index;
+    }
 
-	if ((!prev_index) && (chr_x < 0))
-	  start_x = chr_x;
-	if ((chr_x + chr_w) > end_x)
-	  end_x = chr_x + chr_w;
+    if (prev_index) {
+        /* string is not empty. Adjust it */
+        RGBA_Font_Glyph *fg;
+        fg = evas_common_font_int_cache_glyph_get(fi, prev_index);
+        int right_bearing = (fg->glyph->advance.x >> 16) - fg->glyph_out->bitmap.width - fg->glyph_out->left;
+        end_x -= right_bearing;
+#ifdef DEBUG_TEXTBLOCK
+        fprintf(stderr, " -> Adjusting width for %d pixels, right bearing of last glyph\n", right_bearing);
+#endif
+    }
+    LKU(fi->ft_mutex);
 
-	pen_x += fg->glyph->advance.x >> 16;
-	prev_index = index;
-     }
-   if (w) *w = end_x - start_x;
-   if (h) *h = evas_common_font_max_ascent_get(fn) + evas_common_font_max_descent_get(fn);
+    if (w)
+        *w = end_x;
+    if (h) *h = evas_common_font_ascent_get(fn) + evas_common_font_descent_get(fn);
 }
 
 /* text x inset */
