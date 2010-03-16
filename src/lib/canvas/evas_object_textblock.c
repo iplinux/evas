@@ -102,6 +102,9 @@ struct _Evas_Object_Textblock_Format
    unsigned char        underline2 : 1;
    unsigned char        strikethrough : 1;
    unsigned char        backing : 1;
+   unsigned char        ellipsis_left : 1;
+   unsigned char        ellipsis_right : 1;
+   const char          *ellipsis_symbol;
 };
 
 struct _Evas_Textblock_Style
@@ -444,6 +447,7 @@ _format_free(const Evas_Object *obj, Evas_Object_Textblock_Format *fmt)
    if (fmt->font.name) eina_stringshare_del(fmt->font.name);
    if (fmt->font.fallbacks) eina_stringshare_del(fmt->font.fallbacks);
    if (fmt->font.source) eina_stringshare_del(fmt->font.source);
+   if (fmt->ellipsis_symbol) eina_stringshare_del(fmt->ellipsis_symbol);
    evas_font_free(obj->layer->evas, fmt->font.font);
    free(fmt);
 }
@@ -897,6 +901,8 @@ static const char *left_marginstr;
 static const char *right_marginstr;
 static const char *underlinestr;
 static const char *strikethroughstr;
+static const char *ellipsisstr;
+static const char *ellipsis_symbolstr;
 static const char *backingstr;
 static const char *stylestr;
 static const char *tabstopsstr;
@@ -926,6 +932,8 @@ _format_command_init(void)
    right_marginstr = eina_stringshare_add("right_margin");
    underlinestr = eina_stringshare_add("underline");
    strikethroughstr = eina_stringshare_add("strikethrough");
+   ellipsisstr = eina_stringshare_add("ellipsis");
+   ellipsis_symbolstr = eina_stringshare_add("ellipsis_symbol");
    backingstr = eina_stringshare_add("backing");
    stylestr = eina_stringshare_add("style");
    tabstopsstr = eina_stringshare_add("tabstops");
@@ -956,6 +964,8 @@ _format_command_shutdown(void)
    eina_stringshare_del(right_marginstr);
    eina_stringshare_del(underlinestr);
    eina_stringshare_del(strikethroughstr);
+   eina_stringshare_del(ellipsisstr);
+   eina_stringshare_del(ellipsis_symbolstr);
    eina_stringshare_del(backingstr);
    eina_stringshare_del(stylestr);
    eina_stringshare_del(tabstopsstr);
@@ -1193,6 +1203,20 @@ _format_command(Evas_Object *obj, Evas_Object_Textblock_Format *fmt, const char 
 	else if (!strcmp(tmp_param, "on"))
 	  fmt->strikethrough = 1;
      }
+   else if (cmd == ellipsisstr)
+     {
+         if (!strcmp(tmp_param, "left"))
+             fmt->ellipsis_left = 1;
+         else if (!strcmp(tmp_param, "right"))
+             fmt->ellipsis_right = 1;
+         else if (!strcmp(tmp_param, "none"))
+             fmt->ellipsis_left = fmt->ellipsis_right = 0;
+     }
+   else if (cmd == ellipsis_symbolstr)
+     {
+         if (fmt->ellipsis_symbol) eina_stringshare_del(fmt->ellipsis_symbol);
+         fmt->ellipsis_symbol = eina_stringshare_add(tmp_param);
+     }
    else if (cmd == backingstr)
      {
 	if (!strcmp(tmp_param, "off"))
@@ -1369,6 +1393,7 @@ _format_dup(Evas_Object *obj, Evas_Object_Textblock_Format *fmt)
    if (fmt->font.name) fmt2->font.name = eina_stringshare_add(fmt->font.name);
    if (fmt->font.fallbacks) fmt2->font.fallbacks = eina_stringshare_add(fmt->font.fallbacks);
    if (fmt->font.source) fmt2->font.source = eina_stringshare_add(fmt->font.source);
+   if (fmt->ellipsis_symbol) fmt2->ellipsis_symbol = eina_stringshare_add(fmt->ellipsis_symbol);
 
    if ((fmt2->font.name) && (fmt2->font.fallbacks))
      {
@@ -1931,161 +1956,193 @@ _layout_text_append(Ctxt *c, Evas_Object_Textblock_Format *fmt, Evas_Object_Text
          * Split text to fill the current line
          */
 	if ((c->w >= 0) &&
-	    ((fmt->wrap_word) || (fmt->wrap_char)) &&
+	    ((fmt->wrap_word) || (fmt->wrap_char) || fmt->ellipsis_left || fmt->ellipsis_right) &&
 	    ((c->x + tw) >
 	     (c->w - c->o->style_pad.l - c->o->style_pad.r -
 	      c->marginl - c->marginr)))
 	  {
              /*
-              * This branch: text needs to be wrapped, and does not fit single
+              * This branch: text needs to be wrapped/ellipsized, and does not fit single
               * line.
               */
-	     wrap = _layout_text_cutoff_get(c, fmt, it);
-             if (wrap == 0)
-               evas_common_font_utf8_get_next((unsigned char *)str, &wrap);
+              if (fmt->ellipsis_left || fmt->ellipsis_right) {
 
-	     if (wrap > 0)
-	       {
-		  if (fmt->wrap_word)
-		    {
-		       index = wrap;
-		       ch = evas_common_font_utf8_get_next((unsigned char *)str, &index);
-		       if (!_is_white(ch))
-			 wrap = _layout_word_start(str, wrap);
-		       if (wrap > 0)
-			 {
-			    twrap = wrap;
-			    ch = evas_common_font_utf8_get_prev((unsigned char *)str, &twrap);
-			    /* the text intersects the wrap point on a whitespace char */
-			    if (_is_white(ch))
+                  int width = c->w - c->o->style_pad.l - c->o->style_pad.r - c->marginl - c->marginr - c->x;
+
+                  char *ellipsis_symbol = fmt->ellipsis_symbol ? fmt->ellipsis_symbol : "...";
+
+                  int ew, eh;
+                  c->ENFN->font_string_size_get(c->ENDT, fmt->font.font, ellipsis_symbol, &ew, &eh);
+
+                  /* Now we know size of ellipsis character, so we can calculate how much we want to cut */
+
+                  if (fmt->ellipsis_right) {
+                      int cut = c->ENFN->font_last_up_to_pos(c->ENDT, fmt->font.font, it->text,
+                                                              width - ew, 0);
+
+                      char *ts = it->text;
+                      asprintf(&it->text, "%.*s%s", cut, ts, ellipsis_symbol);
+                      free(ts);
+                  } else {
+                      int cut = evas_common_font_query_suffix_needed_width(fmt->font.font, it->text,
+                                                                           width - ew);
+
+                      char *ts = it->text;
+                      asprintf(&it->text, "%s%s", ellipsis_symbol, ts + cut);
+                      free(ts);
+                  }
+
+                  str = NULL;
+                  new_line = EINA_TRUE;
+
+              } else {
+                  wrap = _layout_text_cutoff_get(c, fmt, it);
+                  if (wrap == 0)
+                      evas_common_font_utf8_get_next((unsigned char *)str, &wrap);
+
+                  if (wrap > 0)
+                  {
+                      if (fmt->wrap_word)
+                      {
+                          index = wrap;
+                          ch = evas_common_font_utf8_get_next((unsigned char *)str, &index);
+                          if (!_is_white(ch))
+                              wrap = _layout_word_start(str, wrap);
+                          if (wrap > 0)
+                          {
+                              twrap = wrap;
+                              ch = evas_common_font_utf8_get_prev((unsigned char *)str, &twrap);
+                              /* the text intersects the wrap point on a whitespace char */
+                              if (_is_white(ch))
 			      {
-				 _layout_item_text_cutoff(c, it, wrap);
-				 twrap = wrap;
-				 /*we don't want to move next, that's why it's
-				  * commented out.
-				  * ch = evas_common_font_utf8_get_next((unsigned char *)str, &twrap);
-				  */
-				 str = str + twrap;
+                                  _layout_item_text_cutoff(c, it, wrap);
+                                  twrap = wrap;
+                                  /*we don't want to move next, that's why it's
+                                   * commented out.
+                                   * ch = evas_common_font_utf8_get_next((unsigned char *)str, &twrap);
+                                   */
+                                  str = str + twrap;
 			      }
-			    /* intersects a word */
-			    else
+                              /* intersects a word */
+                              else
 			      {
-				 /* walk back to start of word */
-				 twrap = _layout_word_start(str, wrap);
-				 if (twrap != 0)
-				   {
+                                  /* walk back to start of word */
+                                  twrap = _layout_word_start(str, wrap);
+                                  if (twrap != 0)
+                                  {
 				      wrap = twrap;
 				      ch = evas_common_font_utf8_get_prev((unsigned char *)str, &twrap);
 				      _layout_item_text_cutoff(c, it, twrap);
 				      str = str + wrap;
-				   }
-				 else
-				   {
+                                  }
+                                  else
+                                  {
 				      empty_item = 1;
 				      if (it->text) free(it->text);
 				      _format_free(c->obj, it->format);
 				      free(it);
                                       if (c->ln->items)
-                                        {
-                                           it = (Evas_Object_Textblock_Item *)(EINA_INLIST_GET(c->ln->items))->last;
-                                           _layout_strip_trailing_whitespace(c, fmt, it);
-                                           twrap = _layout_word_end(str, wrap);
-                                           ch = evas_common_font_utf8_get_next((unsigned char *)str, &twrap);
-                                           str = str + twrap;
-                                        }
-				   }
+                                      {
+                                          it = (Evas_Object_Textblock_Item *)(EINA_INLIST_GET(c->ln->items))->last;
+                                          _layout_strip_trailing_whitespace(c, fmt, it);
+                                          twrap = _layout_word_end(str, wrap);
+                                          ch = evas_common_font_utf8_get_next((unsigned char *)str, &twrap);
+                                          str = str + twrap;
+                                      }
+                                  }
 			      }
-			 }
-		       else
-			 {
-			    /* wrap now is the index of the word START */
-			    index = wrap;
-			    ch = evas_common_font_utf8_get_next((unsigned char *)str, &index);
-			    if (!_is_white(ch) &&
-				(!_layout_last_item_ends_in_whitespace(c)))
+                          }
+                          else
+                          {
+                              /* wrap now is the index of the word START */
+                              index = wrap;
+                              ch = evas_common_font_utf8_get_next((unsigned char *)str, &index);
+                              if (!_is_white(ch) &&
+                                  (!_layout_last_item_ends_in_whitespace(c)))
 			      {
-				 _layout_walk_back_to_item_word_redo(c, it);
-				 return;
+                                  _layout_walk_back_to_item_word_redo(c, it);
+                                  return;
 			      }
-			    if (c->ln->items != NULL)
+                              if (c->ln->items != NULL)
 			      {
-				 white_stripped = _layout_item_abort(c, fmt, it);
-				 empty_item = 1;
+                                  white_stripped = _layout_item_abort(c, fmt, it);
+                                  empty_item = 1;
 			      }
-			    else
+                              else
 			      {
-				 if (wrap <= 0)
-				   {
+                                  if (wrap <= 0)
+                                  {
 				      wrap = 0;
 				      twrap = _layout_word_end(it->text, wrap);
 				      wrap = twrap;
 				      ch = evas_common_font_utf8_get_next((unsigned char *)str, &wrap);
 				      if (twrap >= 0)
-					_layout_item_text_cutoff(c, it, twrap);
+                                          _layout_item_text_cutoff(c, it, twrap);
 				      if (wrap > 0)
-					str = str + wrap;
+                                          str = str + wrap;
 				      else
-					str = NULL;
-				   }
-				 else
-				   str = NULL;
+                                          str = NULL;
+                                  }
+                                  else
+                                      str = NULL;
 			      }
-			 }
-		    }
-		  else if (fmt->wrap_char)
-		    {
-		       _layout_item_text_cutoff(c, it, wrap);
-		       str = str + wrap;
-		    }
-		  new_line = 1;
-	       }
-	     else
-	       {
-		  /* wrap now is the index of the word START */
-		  if (wrap <= 0)
-		    {
-		       if (wrap < 0) wrap = 0;
-		       index = wrap;
-		       ch = evas_common_font_utf8_get_next((unsigned char *)str, &index);
-		       if (!_is_white(ch) &&
-			   (!_layout_last_item_ends_in_whitespace(c)))
-			 {
-			    _layout_walk_back_to_item_word_redo(c, it);
-			    return;
-			 }
-		    }
-		  if (c->ln->items != NULL)
-		    {
-		       white_stripped = _layout_item_abort(c, fmt, it);
-		       empty_item = 1;
-		       new_line = 1;
-		    }
-		  else
-		    {
-		       if (wrap <= 0)
-			 {
-			    wrap = 0;
-			    twrap = _layout_word_end(it->text, wrap);
-			    wrap = _layout_word_next(it->text, wrap);
-			    if (twrap >= 0)
-			      _layout_item_text_cutoff(c, it, twrap);
-			    if (wrap >= 0)
-			      str = str + wrap;
-			    else
-			      str = NULL;
-			 }
-		       else
-			 str = NULL;
-		       new_line = 1;
-		    }
-	       }
+                          }
+                      }
+                      else if (fmt->wrap_char)
+                      {
+                          _layout_item_text_cutoff(c, it, wrap);
+                          str = str + wrap;
+                      }
+                      new_line = 1;
+                  }
+                  else
+                  {
+                      /* wrap now is the index of the word START */
+                      if (wrap <= 0)
+                      {
+                          if (wrap < 0) wrap = 0;
+                          index = wrap;
+                          ch = evas_common_font_utf8_get_next((unsigned char *)str, &index);
+                          if (!_is_white(ch) &&
+                              (!_layout_last_item_ends_in_whitespace(c)))
+                          {
+                              _layout_walk_back_to_item_word_redo(c, it);
+                              return;
+                          }
+                      }
+                      if (c->ln->items != NULL)
+                      {
+                          white_stripped = _layout_item_abort(c, fmt, it);
+                          empty_item = 1;
+                          new_line = 1;
+                      }
+                      else
+                      {
+                          if (wrap <= 0)
+                          {
+                              wrap = 0;
+                              twrap = _layout_word_end(it->text, wrap);
+                              wrap = _layout_word_next(it->text, wrap);
+                              if (twrap >= 0)
+                                  _layout_item_text_cutoff(c, it, twrap);
+                              if (wrap >= 0)
+                                  str = str + wrap;
+                              else
+                                  str = NULL;
+                          }
+                          else
+                              str = NULL;
+                          new_line = 1;
+                      }
+                  }
+              }
 
-	     if (!empty_item)
-	       {
-		  tw = th = 0;
-		  if (fmt->font.font)
-		    c->ENFN->font_string_size_get(c->ENDT, fmt->font.font, it->text, &tw, &th);
-	       }
+              if (!empty_item)
+              {
+                  tw = th = 0;
+                  if (fmt->font.font)
+                      c->ENFN->font_string_size_get(c->ENDT, fmt->font.font, it->text, &tw, &th);
+              }
 	  }
 	else
           {

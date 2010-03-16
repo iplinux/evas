@@ -565,3 +565,78 @@ evas_common_font_query_last_up_to_pos(RGBA_Font *fn, const char *text, int x, in
      }
    return -1;
 }
+
+EAPI int
+evas_common_font_query_suffix_needed_width(RGBA_Font *fn, const char *text, int w)
+{
+    int end_x = 0;
+
+//   int pen_x, pen_y;
+//   int prev_chr_end;
+//   int chr;
+//   int asc, desc;
+    FT_UInt prev_index = -1;
+
+    RGBA_Font_Int *fi = fn->fonts->data;
+//   FT_Face pface = NULL;
+
+//   pen_x = 0;
+//   pen_y = 0;
+    evas_common_font_size_use(fn);
+    int use_kerning = FT_HAS_KERNING(fi->src->ft.face);
+
+    if (w <= 0)
+        return -1;
+
+//   prev_index = 0;
+//   prev_chr_end = 0;
+//   asc = evas_common_font_max_ascent_get(fn);
+//   desc = evas_common_font_max_descent_get(fn);
+
+    int idx = strlen(text);
+    int prev_idx;
+
+    while (idx >= 0)
+    {
+        /* Advance idx back to previous codepoint */
+        idx--;
+        while ((idx > 0) && ((text[idx] & 0xc0) == 0x80))
+            idx--;
+        /* Get codepoint at idx */
+        int p = idx;
+        int gl = evas_common_font_utf8_get_next(text, &p);
+
+        FT_UInt index = evas_common_font_glyph_search(fn, &fi, gl);
+        RGBA_Font_Glyph *fg = evas_common_font_int_cache_glyph_get(fi, index);
+
+        int chr_w = fg->glyph->advance.x >> 16;
+
+        int kern = 0;
+        if (prev_index != -1) {
+            if (use_kerning) {
+                int kern;
+                if (evas_common_font_query_kerning(fi, index, prev_index, &kern)) {
+                    chr_w += kern;
+                }
+            }
+        } else {
+            /*
+             * First glyph (from the right), so subtract right-side bearing from
+             * the width
+             */
+            int right_bearing = (fg->glyph->advance.x >> 16)
+                - fg->glyph_out->bitmap.width - fg->glyph_out->left;
+
+            chr_w -= right_bearing;
+        }
+
+        if (end_x + chr_w > w)
+            return prev_idx;
+
+        end_x += chr_w;
+        prev_index = index;
+        prev_idx = idx;
+    }
+
+    return 0;
+}
