@@ -1,3 +1,9 @@
+evas (0.9.9.063-9) zelazny; urgency=low
+
+  * Add ellipsis support to TEXTBLOCK (OI#825)
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Wed, 17 Mar 2010 01:37:57 +0600
+
 evas (0.9.9.063-8) zelazny; urgency=low
 
   * Fix a lot of bugs in fonts handling and Text/Textblock rendering
