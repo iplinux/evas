@@ -1,3 +1,9 @@
+evas (0.9.9.49898-1) asimov; urgency=low
+
+  * svn-06 snapshot
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Fri, 02 Jul 2010 18:37:30 +0200
+
 evas (0.9.9.063-9) zelazny; urgency=low
 
   * Add ellipsis support to TEXTBLOCK (OI#825)
