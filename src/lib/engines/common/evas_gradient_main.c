@@ -160,6 +160,15 @@ evas_common_gradient_free(RGBA_Gradient *gr)
    if (!gr) return;
    gr->references--;
    if (gr->references > 0) return;
+#ifdef EVAS_FRAME_QUEUING
+        LKL(gr->ref_fq_add);  LKL(gr->ref_fq_del);
+        if (gr->ref_fq[0] != gr->ref_fq[1])
+          {
+             LKU(gr->ref_fq_add); LKU(gr->ref_fq_del);
+             return;
+          }
+	LKU(gr->ref_fq_add); LKU(gr->ref_fq_del);
+#endif
    evas_common_gradient_clear(gr);
    if (gr->type.name) free(gr->type.name);
    if (gr->type.params) free(gr->type.params);
@@ -427,7 +436,7 @@ evas_common_gradient_draw(RGBA_Image *dst, RGBA_Draw_Context *dc,
 			  int x, int y, int w, int h, RGBA_Gradient *gr)
 {
    Gfx_Func_Gradient_Fill   gfunc;
-   RGBA_Gfx_Func            bfunc;
+   RGBA_Gfx_Func            bfunc = NULL;
    int             len;
    int             xin, yin, xoff, yoff;
    int             clx, cly, clw, clh;

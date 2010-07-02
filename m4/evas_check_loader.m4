@@ -174,12 +174,13 @@ have_dep="no"
 evas_image_loader_[]$1[]_cflags=""
 evas_image_loader_[]$1[]_libs=""
 
-PKG_CHECK_EXISTS([libpng12],
-   [PKG_CHECK_MODULES([PNG], [libpng12], [have_dep="yes" requirement="libpng12"], [have_dep="no"])],
-   [PKG_CHECK_EXISTS([libpng10],
-       [PKG_CHECK_MODULES([PNG], [libpng10], [have_dep="yes" requirement="libpng10"], [have_dep="no"])],
-       [PKG_CHECK_MODULES([PNG], [libpng], [have_dep="yes" requirement="libpng"], [have_dep="no"])])]
-)
+PKG_CHECK_EXISTS([libpng14], [PKG_CHECK_MODULES([PNG], [libpng14], [have_dep="yes" requirement="libpng14"], [have_dep="no"])],
+  [PKG_CHECK_EXISTS([libpng12], [PKG_CHECK_MODULES([PNG], [libpng12], [have_dep="yes" requirement="libpng12"], [have_dep="no"])],
+    [PKG_CHECK_EXISTS([libpng10], [PKG_CHECK_MODULES([PNG], [libpng10], [have_dep="yes" requirement="libpng10"], [have_dep="no"])],
+      [PKG_CHECK_MODULES([PNG], [libpng], [have_dep="yes" requirement="libpng"], [have_dep="no"])
+    ])
+  ])
+])
 
 evas_image_loader_[]$1[]_cflags="${PNG_CFLAGS}"
 evas_image_loader_[]$1[]_libs="${PNG_LIBS}"
@@ -306,14 +307,54 @@ fi
 
 ])
 
+dnl use: EVAS_CHECK_LOADER_DEP_BMP(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+
+AC_DEFUN([EVAS_CHECK_LOADER_DEP_BMP],
+[
+
+have_dep="yes"
+evas_image_loader_[]$1[]_cflags=""
+evas_image_loader_[]$1[]_libs=""
+
+AC_SUBST([evas_image_loader_$1_cflags])
+AC_SUBST([evas_image_loader_$1_libs])
+
+if test "x${have_dep}" = "xyes" ; then
+  m4_default([$3], [:])
+else
+  m4_default([$4], [:])
+fi
+
+])
+
+dnl use: EVAS_CHECK_LOADER_DEP_TGA(loader, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+
+AC_DEFUN([EVAS_CHECK_LOADER_DEP_TGA],
+[
+
+have_dep="yes"
+evas_image_loader_[]$1[]_cflags=""
+evas_image_loader_[]$1[]_libs=""
+
+AC_SUBST([evas_image_loader_$1_cflags])
+AC_SUBST([evas_image_loader_$1_libs])
+
+if test "x${have_dep}" = "xyes" ; then
+  m4_default([$3], [:])
+else
+  m4_default([$4], [:])
+fi
+
+])
+
 dnl use: EVAS_CHECK_IMAGE_LOADER(loader, want_loader, macro)
 
 
 AC_DEFUN([EVAS_CHECK_IMAGE_LOADER],
 [
 
-m4_pushdef([UP], m4_toupper([[$1]]))
-m4_pushdef([DOWN], m4_tolower([[$1]]))
+m4_pushdef([UP], m4_toupper([$1]))
+m4_pushdef([DOWN], m4_tolower([$1]))
 
 want_loader="$2"
 want_static_loader="no"

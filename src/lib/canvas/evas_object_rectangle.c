@@ -66,16 +66,10 @@ static const Evas_Object_Func object_func =
 /* the actual api call to add a rect */
 /* it has no other api calls as all properties are standard */
 
-/**
- * @defgroup Evas_Object_Rectangle Rectangle Object Functions
- *
- * Functions that operate on evas rectangle objects.
- */
 
 /**
  * @addtogroup Evas_Object_Rectangle
  * @{
- * @ingroup Evas_Object_Specific
  */
 
 /**
@@ -91,7 +85,7 @@ evas_object_rectangle_add(Evas *e)
    MAGIC_CHECK(e, Evas, MAGIC_EVAS);
    return NULL;
    MAGIC_CHECK_END();
-   obj = evas_object_new();
+   obj = evas_object_new(e);
    evas_object_rectangle_init(obj);
    evas_object_inject(obj, e);
    return obj;

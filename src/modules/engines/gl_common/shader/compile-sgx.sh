@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 function compile()
 {
   F=$1
@@ -8,7 +8,12 @@ function compile()
 }
 
 compile rect
-compile img
 compile font
+compile img
+compile img_nomul
+compile img_bgra
+compile img_bgra_nomul
 compile yuv
+compile yuv_nomul
 compile tex
+compile tex_nomul

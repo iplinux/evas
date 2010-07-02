@@ -8,6 +8,53 @@ int _evas_xrender_xcb_log_dom = -1;
 /* function tables - filled in later (func and parent func) */
 static Evas_Func func, pfunc;
 
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+struct xrdb_user
+{
+   time_t last_stat;
+   time_t last_mtime;
+   XrmDatabase db;
+};
+static struct xrdb_user xrdb_user = {0, 0, NULL};
+
+static Eina_Bool
+xrdb_user_query(const char *name, const char *cls, char **type, XrmValue *val)
+{
+   time_t last = xrdb_user.last_stat, now = time(NULL);
+
+   xrdb_user.last_stat = now;
+   if (last != now) /* don't stat() more than once every second */
+     {
+	struct stat st;
+	const char *home = getenv("HOME");
+	char tmp[PATH_MAX];
+
+	if (!home) goto failed;
+	snprintf(tmp, sizeof(tmp), "%s/.Xdefaults", home);
+	if (stat(tmp, &st) != 0) goto failed;
+	if (xrdb_user.last_mtime != st.st_mtime)
+	  {
+	     if (xrdb_user.db) XrmDestroyDatabase(xrdb_user.db);
+	     xrdb_user.db = XrmGetFileDatabase(tmp);
+	     if (!xrdb_user.db) goto failed;
+	     xrdb_user.last_mtime = st.st_mtime;
+	  }
+     }
+
+   if (!xrdb_user.db) return EINA_FALSE;
+   return XrmGetResource(xrdb_user.db, name, cls, type, val);
+
+ failed:
+   if (xrdb_user.db)
+     {
+	XrmDestroyDatabase(xrdb_user.db);
+	xrdb_user.db = NULL;
+     }
+   xrdb_user.last_mtime = 0;
+   return EINA_FALSE;
+}
+#endif
+
 /* engine struct data */
 typedef struct _Render_Engine        Render_Engine;
 typedef struct _Render_Engine_Update Render_Engine_Update;
@@ -30,6 +77,13 @@ struct _Render_Engine
    } x11;
    unsigned char    destination_alpha : 1;
 
+#ifdef BUILD_ENGINE_XRENDER_X11
+   XrmDatabase   xrdb; // xres - dpi
+   struct { // xres - dpi
+      int        dpi; // xres - dpi
+   } xr; // xres - dpi
+#endif
+   
    Ximage_Info     *xinf;
    Xrender_Surface *output;
    Xrender_Surface *mask_output;
@@ -101,7 +155,7 @@ struct _Render_Engine
    void (*render_surface_copy)(Xrender_Surface *srs, Xrender_Surface *drs, int sx, int sy, int x, int y, int w, int h);
    void (*render_surface_rectangle_draw)(Xrender_Surface *rs, RGBA_Draw_Context *dc, int x, int y, int w, int h);
    void (*render_surface_line_draw)(Xrender_Surface *rs, RGBA_Draw_Context *dc, int x1, int y1, int x2, int y2);
-   void (*render_surface_polygon_draw)(Xrender_Surface *rs, RGBA_Draw_Context *dc, RGBA_Polygon_Point *points);
+   void (*render_surface_polygon_draw)(Xrender_Surface *rs, RGBA_Draw_Context *dc, RGBA_Polygon_Point *points, int x, int y);
 };
 
 /* internal engine routines */
@@ -217,6 +271,61 @@ _output_xlib_setup(int           width,
    re->render_surface_line_draw = _xr_xlib_render_surface_line_draw;
    re->render_surface_polygon_draw = _xr_xlib_render_surface_polygon_draw;
 
+     {   
+        int status;
+        char *type = NULL;
+        XrmValue val;
+        
+        re->xr.dpi = 75000; // dpy * 1000
+
+	status = xrdb_user_query("Xft.dpi", "Xft.Dpi", &type, &val);
+	if ((!status) || (!type))
+	  {
+	     if (!re->xrdb)
+	       re->xrdb = XrmGetDatabase((Display *)re->x11.connection);
+	     if (re->xrdb)
+	       status = XrmGetResource(re->xrdb,
+				       "Xft.dpi", "Xft.Dpi", &type, &val);
+	  }
+
+        if ((status) && (type))
+          {
+             if (!strcmp(type, "String"))
+               {
+                  const char *str, *dp;
+                  
+                  str = val.addr;
+                  dp = strchr(str, '.');
+                  if (!dp) dp = strchr(str, ',');
+                  
+                  if (dp)
+                    {
+                       int subdpi, len, i;
+                       char *buf;
+                       
+                       buf = alloca(dp - str + 1);
+                       strncpy(buf, str, dp - str);
+                       buf[dp - str] = 0;
+                       len = strlen(dp + 1);
+                       subdpi = atoi(dp + 1);
+                       
+                       if (len < 3)
+                         {
+                            for (i = len; i < 3; i++) subdpi *= 10;
+                         }
+                       else if (len > 3)
+                         {
+                            for (i = len; i > 3; i--) subdpi /= 10;
+                         }
+                       re->xr.dpi = atoi(buf) * 1000;
+                    }
+                  else
+                    re->xr.dpi = atoi(str) * 1000;
+                  evas_common_font_dpi_set(re->xr.dpi / 1000);
+               }
+          }
+     }
+   
    return re;
 }
 
@@ -353,6 +462,7 @@ eng_info(Evas *e __UNUSED__)
    info = calloc(1, sizeof(Evas_Engine_Info_XRender_X11));
    if (!info) return NULL;
    info->magic.magic = rand();
+   info->render_mode = EVAS_RENDER_MODE_BLOCKING;
    return info;
 }
 
@@ -446,6 +556,12 @@ eng_output_free(void *data)
    Render_Engine *re;
 
    re = (Render_Engine *)data;
+   
+#ifdef BUILD_ENGINE_XRENDER_X11
+// NOTE: XrmGetDatabase() result is shared per connection, do not free it.
+//   if (re->xrdb) XrmDestroyDatabase(re->xrdb);
+#endif
+   
    evas_common_font_shutdown();
    evas_common_image_shutdown();
    while (re->updates)
@@ -629,6 +745,17 @@ eng_output_idle_flush(void *data)
 }
 
 static void
+eng_output_dump(void *data)
+{
+   Render_Engine *re;
+
+   re = (Render_Engine *)data;
+   evas_common_image_image_all_unload();
+   evas_common_font_font_all_unload();
+   // FIXME: kill pixmaps too - but... xrender engine is dead... no? :):)
+}
+
+static void
 eng_rectangle_draw(void *data, void *context, void *surface, int x, int y, int w, int h)
 {
    Render_Engine *re;
@@ -651,13 +778,13 @@ eng_line_draw(void *data, void *context, void *surface, int x1, int y1, int x2, 
 }
 
 static void
-eng_polygon_draw(void *data, void *context, void *surface, void *polygon)
+eng_polygon_draw(void *data, void *context, void *surface, void *polygon, int x, int y)
 {
    Render_Engine *re;
 
    re = (Render_Engine *)data;
 
-   re->render_surface_polygon_draw((Xrender_Surface *)surface, (RGBA_Draw_Context *)context, (RGBA_Polygon_Point *)polygon);
+   re->render_surface_polygon_draw((Xrender_Surface *)surface, (RGBA_Draw_Context *)context, (RGBA_Polygon_Point *)polygon, x, y);
 }
 
 
@@ -1400,6 +1527,15 @@ eng_canvas_alpha_get(void *data, void *context)
 static int
 module_open(Evas_Module *em)
 {
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+   static Eina_Bool xrm_inited = EINA_FALSE;
+   if (!xrm_inited)
+     {
+	xrm_inited = EINA_TRUE;
+	XrmInitialize();
+     }
+#endif
+
    if (!em) return 0;
    /* get whatever engine module we inherit from */
    if (!_evas_module_engine_inherit(&pfunc, "software_generic")) return 0;
@@ -1427,6 +1563,7 @@ module_open(Evas_Module *em)
    ORD(output_redraws_next_update_push);
    ORD(output_flush);
    ORD(output_idle_flush);
+   ORD(output_dump);
    ORD(rectangle_draw);
    ORD(line_draw);
    ORD(polygon_draw);
@@ -1514,6 +1651,15 @@ static void
 module_close(Evas_Module *em)
 {
   eina_log_domain_unregister(_evas_xrender_xcb_log_dom);
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+  if (xrdb_user.db)
+    {
+       XrmDestroyDatabase(xrdb_user.db);
+       xrdb_user.last_stat = 0;
+       xrdb_user.last_mtime = 0;
+       xrdb_user.db = NULL;
+    }
+#endif
 }
 
 static Evas_Module_Api evas_modapi =

@@ -8,7 +8,7 @@
 #include <evas_private.h>
 #include <evas_module.h>
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 # ifdef open
 #  undef open
 # endif
@@ -408,8 +408,9 @@ evas_module_unload(Evas_Module *em)
    if (em->definition == NULL)
      return ;
 
-   em->definition->func.close(em);
-   em->loaded = 0;
+// for now lets not unload modules - they may still be in use.   
+//   em->definition->func.close(em);
+//   em->loaded = 0;
 
 #ifdef BUILD_ASYNC_PRELOAD
    LKD(em->lock);

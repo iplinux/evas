@@ -38,6 +38,13 @@ int _evas_soft16_log_dom = -1;
   WRN("NOT_IMPLEMENTED: %s() at %s:%d",				\
            __FUNCTION__, __FILE__, __LINE__)
 
+static void
+eng_output_dump(void *data __UNUSED__)
+{
+   evas_common_image_image_all_unload();
+   evas_common_font_font_all_unload();
+}
+
 static void *
 eng_context_new(void *data __UNUSED__)
 {
@@ -191,9 +198,9 @@ eng_polygon_points_clear(void *data __UNUSED__, void *context __UNUSED__, void *
 }
 
 static void
-eng_polygon_draw(void *data __UNUSED__, void *context, void *surface, void *polygon)
+eng_polygon_draw(void *data __UNUSED__, void *context, void *surface, void *polygon, int x, int y)
 {
-   soft16_polygon_draw(surface, context, polygon);
+   soft16_polygon_draw(surface, context, polygon, x, y);
 }
 
 
@@ -229,7 +236,7 @@ eng_gradient2_linear_free(void *data __UNUSED__, void *linear_gradient __UNUSED_
 }
 
 static void
-eng_gradient2_linear_fill_set(void *data __UNUSED__, void *linear_gradient __UNUSED__, int x0 __UNUSED__, int y0 __UNUSED__, int x1 __UNUSED__, int y1 __UNUSED__)
+eng_gradient2_linear_fill_set(void *data __UNUSED__, void *linear_gradient __UNUSED__, float x0 __UNUSED__, float y0 __UNUSED__, float x1 __UNUSED__, float y1 __UNUSED__)
 {
 }
 
@@ -883,6 +890,7 @@ static Evas_Func func =
      NULL,
      NULL,
      NULL,
+     eng_output_dump,
      /* draw context virtual methods */
      eng_context_new,
      eng_canvas_alpha_get,

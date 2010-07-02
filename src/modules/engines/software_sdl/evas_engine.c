@@ -642,7 +642,8 @@ evas_engine_sdl_image_map4_draw(void *data __UNUSED__, void *context, void *surf
 	_SDL_UPDATE_PIXELS(eim);
      }
 
-   evas_common_map4_rgba(eim->cache_entry.src, dst->cache_entry.src, context, p, smooth, level);
+   evas_common_map4_rgba((RGBA_Image*) eim->cache_entry.src,
+			 (RGBA_Image*) dst->cache_entry.src, context, p, smooth, level);
    evas_common_cpu_end_opt();
 
    if (mustlock_im)
@@ -652,15 +653,43 @@ evas_engine_sdl_image_map4_draw(void *data __UNUSED__, void *context, void *surf
      SDL_UnlockSurface(dst->surface);
 }
 
+static void *
+evas_engine_sdl_image_map_surface_new(void *data, int w, int h, int alpha)
+{
+   Render_Engine *re = (Render_Engine*) data;
+   void *surface;
+
+   surface = evas_cache_engine_image_copied_data(re->cache,
+						 w, h, NULL, alpha,
+						 EVAS_COLORSPACE_ARGB8888,
+						 NULL);
+   return surface;
+}
+
+static void
+evas_engine_sdl_image_map_surface_free(void *data __UNUSED__, void *surface)
+{
+   evas_cache_engine_image_drop(surface);
+}
+
 static void
 evas_engine_sdl_image_scale_hint_set(void *data __UNUSED__, void *image, int hint)
 {
+   SDL_Engine_Image_Entry *eim;
+
+   if (!image) return ;
+   eim = image;
+   eim->cache_entry.src->scale_hint = hint;
 }
 
 static int
 evas_engine_sdl_image_scale_hint_get(void *data __UNUSED__, void *image)
 {
-   return EVAS_IMAGE_SCALE_HINT_NONE;
+   SDL_Engine_Image_Entry *eim;
+
+   if (!image) return EVAS_IMAGE_SCALE_HINT_NONE;
+   eim = image;
+   return eim->cache_entry.src->scale_hint;
 }
 
 static void
@@ -809,7 +838,7 @@ evas_engine_sdl_rectangle_draw(void *data __UNUSED__, void *context, void *surfa
 }
 
 static void
-evas_engine_sdl_polygon_draw(void *data __UNUSED__, void *context, void *surface, void *polygon)
+evas_engine_sdl_polygon_draw(void *data __UNUSED__, void *context, void *surface, void *polygon, int x, int y)
 {
    SDL_Engine_Image_Entry       *eim = surface;
    int                           mustlock_im = 0;
@@ -821,7 +850,7 @@ evas_engine_sdl_polygon_draw(void *data __UNUSED__, void *context, void *surface
 	_SDL_UPDATE_PIXELS(eim);
      }
 
-   evas_common_polygon_draw((RGBA_Image *) eim->cache_entry.src, context, polygon);
+   evas_common_polygon_draw((RGBA_Image *) eim->cache_entry.src, context, polygon, x, y);
    evas_common_cpu_end_opt();
 
    if (mustlock_im)
@@ -895,6 +924,8 @@ static int module_open(Evas_Module *em)
    ORD(image_border_get);
    ORD(image_draw);
    ORD(image_map4_draw);
+   ORD(image_map_surface_new);
+   ORD(image_map_surface_free);
    ORD(image_comment_get);
    ORD(image_format_get);
    ORD(image_cache_flush);
@@ -1045,7 +1076,7 @@ _sdl_image_constructor(Engine_Image_Entry *ie, void *data __UNUSED__)
           }
      }
 
-   return 0;
+   return EVAS_LOAD_ERROR_NONE;
 }
 
 static void

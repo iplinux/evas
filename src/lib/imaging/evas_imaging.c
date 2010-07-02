@@ -9,21 +9,32 @@
 #include "evas_common.h"
 #include "evas_private.h"
 
+/**
+ * @addtogroup Evas_Imaging
+ * @{
+ */
+
+EAPI int evas_imaging_image_load_error = EVAS_LOAD_ERROR_NONE;
+
 EAPI Evas_Imaging_Image *
 evas_imaging_image_load(const char *file, const char *key)
 {
    Evas_Imaging_Image *im;
    RGBA_Image *image;
 
+   evas_imaging_image_load_error = EVAS_LOAD_ERROR_NONE;
+
    if (!file) file = "";
    if (!key) key = "";
    evas_common_cpu_init();
    evas_common_image_init();
-   image = evas_common_load_image_from_file(file, key, NULL);
+   image = evas_common_load_image_from_file
+     (file, key, NULL, &evas_imaging_image_load_error);
    if (!image) return NULL;
    im = calloc(1, sizeof(Evas_Imaging_Image));
    if (!im)
      {
+	evas_imaging_image_load_error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
         evas_cache_image_drop(&image->cache_entry);
 	return NULL;
      }
@@ -230,3 +241,6 @@ evas_imaging_font_cache_get(void)
    return evas_common_font_cache_get();
 }
 
+/**
+ * @}
+ */

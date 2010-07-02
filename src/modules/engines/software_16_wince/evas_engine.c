@@ -95,6 +95,7 @@ eng_info(Evas *e)
    info->magic.magic = rand();
    info->func.suspend = _suspend;
    info->func.resume = _resume;
+   info->render_mode = EVAS_RENDER_MODE_BLOCKING;
    return info;
    e = NULL;
 }
@@ -719,8 +720,8 @@ module_open(Evas_Module *em)
    
    if(_evas_engine_soft16_wince_log_dom < 0)
      {
-       EINA_LOG_ERR("Impossible to create a log domain for the Soft16 Wince engine.\n");
-       return NULL;
+        EINA_LOG_ERR("Impossible to create a log domain for the Soft16 Wince engine.");
+        return 0;
      }
 
    /* store it for later use */
@@ -750,7 +751,6 @@ static void
 module_close(Evas_Module *em)
 {
   eina_log_domain_unregister(_evas_engine_soft16_wince_log_dom);
-  return NULL;
 }
 
 static Evas_Module_Api evas_modapi =

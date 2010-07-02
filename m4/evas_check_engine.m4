@@ -143,11 +143,11 @@ fi
 
 if test "x${have_dep}" = "xyes" ; then
    if test "x$2" = "xyes" ; then
-      x_libs="${x_libs} -lX11 -lXext"
+      x_libs="${x_libs} -lX11 -lXext -lXrender"
    else
       x_dir=${x_dir:-/usr/X11R6}
       x_cflags=${x_cflags:--I${x_includes:-$x_dir/include}}
-      x_libs="${x_libs:--L${x_libraries:-$x_dir/lib}} -lX11"
+      x_libs="${x_libs:--L${x_libraries:-$x_dir/lib}} -lX11 -lXext -lXrender"
    fi
    evas_engine_[]$1[]_cflags="-I/usr/include ${x_cflags}"
    evas_engine_[]$1[]_libs="${x_libs} -lGL -lpthread"
@@ -169,25 +169,6 @@ else
          evas_engine_gl_common_libs="-lGLESv2 -lpthread -lm"
          have_dep="yes"
       fi
-dnl samsung s3c6410 libs changed to be like the sgx ones. need a variety option
-dnl      have_gles20="no"
-dnl      AC_CHECK_LIB(gles20, glTexImage2D, [have_gles20="yes"], , -lEGL)
-dnl      if test "x${have_gles20}" = "xyes" ; then
-dnl         evas_engine_[]$1[]_cflags="${x_cflags}"
-dnl         evas_engine_[]$1[]_libs="${x_libs} -lgles20 -lEGL"
-dnl         AC_DEFINE(GLES_VARIETY_S3C6410, 1, [Samsung S3c6410 GLES2 support])
-dnl         evas_engine_gl_common_libs="-lgles20"
-dnl         have_dep="yes"
-dnl      fi
-dnl      have_glesv2="no"
-dnl      AC_CHECK_LIB(GLESv2, glTexImage2D, [have_glesv2="yes"], , -lEGL ${x_libs} -lpthread -lm)
-dnl      if test "x${have_glesv2}" = "xyes" ; then
-dnl         evas_engine_[]$1[]_cflags="${x_cflags}"
-dnl         evas_engine_[]$1[]_libs="${x_libs} -lGLESv2 -lpthread -lm -lEGL"
-dnl         AC_DEFINE(GLES_VARIETY_SGX, 1, [Imagination SGX GLES2 support])
-dnl         evas_engine_gl_common_libs="-lGLESv2 -lpthread -lm"
-dnl         have_dep="yes"
-dnl      fi
    fi
 fi
 
@@ -406,13 +387,24 @@ dnl use: EVAS_CHECK_ENGINE_DEP_QUARTZ(engine, simple, want_static[, ACTION-IF-FO
 AC_DEFUN([EVAS_CHECK_ENGINE_DEP_QUARTZ],
 [
 
+have_dep="no"
 evas_engine_[]$1[]_cflags=""
 evas_engine_[]$1[]_libs=""
 
-AC_CHECK_HEADERS([/System/Library/Frameworks/Cocoa.framework/Headers/Cocoa.h],
-   [have_dep="yes"],
-   [have_dep="no"]
-)
+AC_REQUIRE([EVAS_MAYBE_GET_OBJCPP])
+
+AS_IF([test "x${rw_cv_prog_objc_works}" = "xyes"],
+[
+   AC_LANG_PUSH([Objective C]) 
+   AC_CHECK_HEADERS([/System/Library/Frameworks/Cocoa.framework/Headers/Cocoa.h],
+      [
+       have_dep="yes"
+       evas_engine_[]$1[]_libs="-framework Cocoa"
+      ],
+      [have_dep="no"])
+   AC_LANG_POP([Objective C]) 
+
+])
 
 AC_SUBST([evas_engine_$1_cflags])
 AC_SUBST([evas_engine_$1_libs])
@@ -423,6 +415,13 @@ else
   m4_default([$5], [:])
 fi
 
+])
+
+dnl Helper macro for EVAS_CHECK_ENGINE_DEP_QUARTZ
+
+AC_DEFUN([EVAS_MAYBE_GET_OBJCPP],
+[AS_IF([test "x${rw_cv_prog_objc_works}" = "xyes"],
+       [AC_PROG_OBJCPP])
 ])
 
 dnl use: EVAS_CHECK_ENGINE_DEP_GL_GLEW(engine, simple, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
@@ -471,6 +470,66 @@ PKG_CHECK_MODULES([SDL],
     evas_engine_[]$1[]_libs="${SDL_LIBS}"
    ]
 )
+
+AC_SUBST([evas_engine_$1_cflags])
+AC_SUBST([evas_engine_$1_libs])
+
+if test "x$3" = "xstatic" ; then
+   requirement_evas="${requirement} ${requirement_evas}"
+fi
+
+if test "x${have_dep}" = "xyes" ; then
+  m4_default([$4], [:])
+else
+  m4_default([$5], [:])
+fi
+
+])
+
+dnl use: EVAS_CHECK_ENGINE_DEP_GL_SDL(engine, simple, want_static[, ACTION-IF-FOUND[, ACTION-IF-NOT-FOUND]])
+
+AC_DEFUN([EVAS_CHECK_ENGINE_DEP_GL_SDL],
+[
+
+requirement=""
+have_dep="no"
+evas_engine_[]$1[]_cflags=""
+evas_engine_[]$1[]_libs=""
+
+PKG_CHECK_MODULES([SDL],
+   [sdl >= 1.2.0],
+   [
+    have_dep="yes"
+    requirement="sdl"
+    evas_engine_[]$1[]_cflags="${SDL_CFLAGS}"
+    evas_engine_[]$1[]_libs="${SDL_LIBS}"
+   ]
+)
+
+AC_CHECK_HEADERS([GL/gl.h],
+   [have_dep="yes"],
+   [have_dep="no"])
+
+if test "x$gl_flavor_gles" = "xyes" ; then
+  have_dep=no
+fi
+
+if test "x${have_dep}" = "xyes" ; then
+   evas_engine_[]$1[]_cflags="${SDL_CFLAGS}"
+   evas_engine_[]$1[]_libs="${SDL_LIBS} -lGL -lpthread"
+   evas_engine_gl_common_libs="-lGL -lpthread"
+else
+   AC_CHECK_HEADERS([SDL/SDL_opengles.h EGL/egl.h], [have_egl="yes"])
+   if test "x${have_egl}" = "xyes" ; then
+      AC_CHECK_LIB(GLESv2, glTexImage2D, [have_glesv2="yes"], , -lEGL -lpthread -lm)
+      if test "x${have_glesv2}" = "xyes" ; then
+         evas_engine_[]$1[]_cflags="${SDL_CFLAGS}"
+         evas_engine_[]$1[]_libs="${SDL_LIBS} -lGLESv2 -lpthread -lm -lEGL"
+         evas_engine_gl_common_libs="-lGLESv2 -lpthread -lm"
+         have_dep="yes"
+      fi
+   fi
+fi
 
 AC_SUBST([evas_engine_$1_cflags])
 AC_SUBST([evas_engine_$1_libs])

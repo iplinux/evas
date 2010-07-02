@@ -1,6 +1,6 @@
 #include "evas_common.h"
-
 #include "evas_intl_utils.h" /*defines INTERNATIONAL_SUPPORT if possible */
+#include "evas_font_private.h" /* for Frame-Queuing support */
 
 EAPI int
 evas_common_font_query_kerning(RGBA_Font_Int* fi,
@@ -12,12 +12,9 @@ evas_common_font_query_kerning(RGBA_Font_Int* fi,
    int key[2];
    int error = 1;
 
+//   return 0;
    key[0] = prev;
    key[1] = index;
-
-#ifdef HAVE_PTHREAD
-   pthread_mutex_lock(&fi->ft_mutex);
-#endif
 
    result = eina_hash_find(fi->kerning, key);
    if (result)
@@ -30,12 +27,14 @@ evas_common_font_query_kerning(RGBA_Font_Int* fi,
     * values to kern by - given same font, same size and same
     * prev_index and index. auto/bytecode or none hinting doesnt
     * matter */
+   FTLOCK();
    if (FT_Get_Kerning(fi->src->ft.face,
 		      key[0], key[1],
 		      ft_kerning_default, &delta) == 0)
      {
 	int *push;
 
+        FTUNLOCK();
 	*kerning = delta.x >> 6;
 
 	push = malloc(sizeof (int) * 3);
@@ -50,12 +49,10 @@ evas_common_font_query_kerning(RGBA_Font_Int* fi,
 	goto on_correct;
      }
 
+        FTUNLOCK();
    error = 0;
 
  on_correct:
-#ifdef HAVE_PTHREAD
-   pthread_mutex_unlock(&fi->ft_mutex);
-#endif
    return error;
 }
 
@@ -63,72 +60,76 @@ evas_common_font_query_kerning(RGBA_Font_Int* fi,
 EAPI void
 evas_common_font_query_size(RGBA_Font *fn, const char *text, int *w, int *h)
 {
-   RGBA_Font_Int *fi = fn->fonts->data;
-
-   int end_x = 0;
-   FT_UInt prev_index = 0;
-   Eina_Bool use_kerning = FT_HAS_KERNING(fi->src->ft.face);;
-
-   evas_common_font_size_use(fn);
-
-#ifdef DEBUG_TEXTBLOCK
-   fprintf(stderr, "evas_common_font_query_size\n");
-#endif
-
+   int use_kerning;
+   int pen_x, pen_y;
+   int start_x, end_x;
    int chr;
-   for (chr = 0; text[chr];) {
-	int gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
-	if (gl == 0)
-            break;
+   FT_UInt prev_index;
+   RGBA_Font_Int *fi;
+   FT_Face pface = NULL;
 
-	FT_UInt index = evas_common_font_glyph_search(fn, &fi, gl);
-        RGBA_Font_Glyph *fg = evas_common_font_int_cache_glyph_get(fi, index);
-        int chr_w = fg->glyph->advance.x >> 16;
+   fi = fn->fonts->data;
 
-#ifdef DEBUG_TEXTBLOCK
-        fprintf(stderr, "U+%d\n", gl);
-        fprintf(stderr, " -> Glyph advance is %d\n", fg->glyph->advance.x >> 16);
-        fprintf(stderr, " -> Width of glyph bitmap is %d pixels\n", fg->glyph_out->bitmap.width);
-#endif
+   start_x = 0;
+   end_x = 0;
 
-        if (prev_index) {
-            /* If there is previous glyph, use kerning. */
-            if (use_kerning) {
-                int kern;
-                if (evas_common_font_query_kerning(fi, prev_index, index, &kern)) {
-#ifdef DEBUG_TEXTBLOCK
-                    fprintf(stderr, " -> Adjusting width for %d pixels, kerning\n", kern);
-#endif
-                    chr_w += kern;
-                }
-            }
-        } else {
-            /* It's a first glyph, so subtract left-side bearing from the
-             * width */
-            chr_w -= fg->glyph_out->left;
-#ifdef DEBUG_TEXTBLOCK
-            fprintf(stderr, " -> Adjusting width for %d pixels, left bearing of first glyph\n", fg->glyph_out->left);
-#endif
-        }
+   pen_x = 0;
+   pen_y = 0;
+//   evas_common_font_size_use(fn);
+   use_kerning = FT_HAS_KERNING(fi->src->ft.face);
+   prev_index = 0;
+   for (chr = 0; text[chr];)
+     {
+	FT_UInt index;
+	RGBA_Font_Glyph *fg;
+	int chr_x, chr_y, chr_w;
+        int gl, kern;
 
-        end_x += chr_w;
-        prev_index = index;
+	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
+	if (gl == 0) break;
+	index = evas_common_font_glyph_search(fn, &fi, gl);
+	LKL(fi->ft_mutex);
+        if (fi->src->current_size != fi->size)
+          {
+             FT_Activate_Size(fi->ft.size);
+             fi->src->current_size = fi->size;
+          }
+      /* hmmm kerning means i can't sanely do my own cached metric tables! */
+	/* grrr - this means font face sharing is kinda... not an option if */
+	/* you want performance */
+	kern = 0;
+	if ((use_kerning) && (prev_index) && (index) &&
+	    (pface == fi->src->ft.face))
+	  if (evas_common_font_query_kerning(fi, prev_index, index, &kern))
+	    pen_x += kern;
+
+	pface = fi->src->ft.face;
+	fg = evas_common_font_int_cache_glyph_get(fi, index);
+	LKU(fi->ft_mutex);
+	if (!fg) continue;
+
+	if (kern < 0) kern = 0;
+	chr_x = ((pen_x - kern) + (fg->glyph_out->left));
+	chr_y = (pen_y + (fg->glyph_out->top));
+//	chr_w = fg->glyph_out->bitmap.width;
+	chr_w = fg->glyph_out->bitmap.width + kern;
+	  {
+	     int advw;
+
+	     advw = ((fg->glyph->advance.x + (kern << 16)) >> 16);
+	     if (chr_w < advw) chr_w = advw;
+	  }
+
+	if ((!prev_index) && (chr_x < 0))
+	  start_x = chr_x;
+	if ((chr_x + chr_w) > end_x)
+	  end_x = chr_x + chr_w;
+
+	pen_x += fg->glyph->advance.x >> 16;
+	prev_index = index;
      }
-
-   if (prev_index) {
-       /* string is not empty. Adjust it */
-       RGBA_Font_Glyph *fg;
-       fg = evas_common_font_int_cache_glyph_get(fi, prev_index);
-       int right_bearing = (fg->glyph->advance.x >> 16) - fg->glyph_out->bitmap.width - fg->glyph_out->left;
-       end_x -= right_bearing;
-#ifdef DEBUG_TEXTBLOCK
-       fprintf(stderr, " -> Adjusting width for %d pixels, right bearing of last glyph\n", right_bearing);
-#endif
-   }
-
-   if (w)
-       *w = end_x;
-   if (h) *h = evas_common_font_ascent_get(fn) + evas_common_font_descent_get(fn);
+   if (w) *w = end_x - start_x;
+   if (h) *h = evas_common_font_max_ascent_get(fn) + evas_common_font_max_descent_get(fn);
 }
 
 /* text x inset */
@@ -147,8 +148,13 @@ evas_common_font_query_inset(RGBA_Font *fn, const char *text)
    if (!text[0]) return 0;
    gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
    if (gl == 0) return 0;
-   evas_common_font_size_use(fn);
+//   evas_common_font_size_use(fn);
    index = evas_common_font_glyph_search(fn, &fi, gl);
+   if (fi->src->current_size != fi->size)
+     {
+        FT_Activate_Size(fi->ft.size);
+        fi->src->current_size = fi->size;
+     }
    fg = evas_common_font_int_cache_glyph_get(fi, index);
    if (!fg) return 0;
 /*
@@ -185,8 +191,10 @@ evas_common_font_query_advance(RGBA_Font *fn, const char *text, int *h_adv, int 
    start_x = 0;
    pen_x = 0;
    pen_y = 0;
-   evas_common_font_size_use(fn);
+//   evas_common_font_size_use(fn);
+   FTLOCK();
    use_kerning = FT_HAS_KERNING(fi->src->ft.face);
+   FTUNLOCK();
    prev_index = 0;
    for (chr = 0; text[chr];)
      {
@@ -198,7 +206,13 @@ evas_common_font_query_advance(RGBA_Font *fn, const char *text, int *h_adv, int 
 	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
 	if (gl == 0) break;
 	index = evas_common_font_glyph_search(fn, &fi, gl);
-        /* hmmm kerning means i can't sanely do my own cached metric tables! */
+	LKL(fi->ft_mutex);
+        if (fi->src->current_size != fi->size)
+          {
+             FT_Activate_Size(fi->ft.size);
+             fi->src->current_size = fi->size;
+          }
+      /* hmmm kerning means i can't sanely do my own cached metric tables! */
 	/* grrr - this means font face sharing is kinda... not an option if */
 	/* you want performance */
 	if ((use_kerning) && (prev_index) && (index) &&
@@ -208,6 +222,7 @@ evas_common_font_query_advance(RGBA_Font *fn, const char *text, int *h_adv, int 
 
 	pface = fi->src->ft.face;
 	fg = evas_common_font_int_cache_glyph_get(fi, index);
+	LKU(fi->ft_mutex);
 	if (!fg) continue;
 
         chr_x = (pen_x + (fg->glyph_out->left));
@@ -251,7 +266,12 @@ evas_common_font_query_char_coords(RGBA_Font *fn, const char *in_text, int pos, 
 
    pen_x = 0;
    pen_y = 0;
-   evas_common_font_size_use(fn);
+//   evas_common_font_size_use(fn);
+   if (fi->src->current_size != fi->size)
+     {
+        FT_Activate_Size(fi->ft.size);
+        fi->src->current_size = fi->size;
+     }
    use_kerning = FT_HAS_KERNING(fi->src->ft.face);
    prev_index = 0;
    prev_chr_end = 0;
@@ -288,6 +308,8 @@ evas_common_font_query_char_coords(RGBA_Font *fn, const char *in_text, int pos, 
 	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
 	if (gl == 0) break;
 	index = evas_common_font_glyph_search(fn, &fi, gl);
+	LKL(fi->ft_mutex);
+	// FIXME: Why no FT_Activate_Size here ?
 	kern = 0;
         /* hmmm kerning means i can't sanely do my own cached metric tables! */
 	/* grrr - this means font face sharing is kinda... not an option if */
@@ -314,6 +336,7 @@ evas_common_font_query_char_coords(RGBA_Font *fn, const char *in_text, int pos, 
 
 	pface = fi->src->ft.face;
 	fg = evas_common_font_int_cache_glyph_get(fi, index);
+	LKU(fi->ft_mutex);
 	if (!fg) continue;
 
 	if (kern < 0) kern = 0;
@@ -386,7 +409,12 @@ evas_common_font_query_text_at_pos(RGBA_Font *fn, const char *in_text, int x, in
 
    pen_x = 0;
    pen_y = 0;
-   evas_common_font_size_use(fn);
+//   evas_common_font_size_use(fn);
+   if (fi->src->current_size != fi->size)
+     {
+        FT_Activate_Size(fi->ft.size);
+        fi->src->current_size = fi->size;
+     }
    use_kerning = FT_HAS_KERNING(fi->src->ft.face);
    prev_index = 0;
    prev_chr_end = 0;
@@ -405,6 +433,8 @@ evas_common_font_query_text_at_pos(RGBA_Font *fn, const char *in_text, int x, in
 	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
 	if (gl == 0) break;
 	index = evas_common_font_glyph_search(fn, &fi, gl);
+	LKL(fi->ft_mutex);
+	// FIXME: Why not FT_Activate_Size here ?
 	kern = 0;
         /* hmmm kerning means i can't sanely do my own cached metric tables! */
 	/* grrr - this means font face sharing is kinda... not an option if */
@@ -431,6 +461,7 @@ evas_common_font_query_text_at_pos(RGBA_Font *fn, const char *in_text, int x, in
 
 	pface = fi->src->ft.face;
 	fg = evas_common_font_int_cache_glyph_get(fi, index);
+	LKU(fi->ft_mutex);
 	if (!fg) continue;
 
 	if (kern < 0) kern = 0;
@@ -507,7 +538,7 @@ evas_common_font_query_last_up_to_pos(RGBA_Font *fn, const char *text, int x, in
 
    pen_x = 0;
    pen_y = 0;
-   evas_common_font_size_use(fn);
+//   evas_common_font_size_use(fn);
    use_kerning = FT_HAS_KERNING(fi->src->ft.face);
    prev_index = 0;
    prev_chr_end = 0;
@@ -525,6 +556,12 @@ evas_common_font_query_last_up_to_pos(RGBA_Font *fn, const char *text, int x, in
 	gl = evas_common_font_utf8_get_next((unsigned char *)text, &chr);
 	if (gl == 0) break;
 	index = evas_common_font_glyph_search(fn, &fi, gl);
+	LKL(fi->ft_mutex);
+        if (fi->src->current_size != fi->size)
+          {
+             FT_Activate_Size(fi->ft.size);
+             fi->src->current_size = fi->size;
+          }
 	kern = 0;
         /* hmmm kerning means i can't sanely do my own cached metric tables! */
 	/* grrr - this means font face sharing is kinda... not an option if */
@@ -536,6 +573,7 @@ evas_common_font_query_last_up_to_pos(RGBA_Font *fn, const char *text, int x, in
 
 	pface = fi->src->ft.face;
 	fg = evas_common_font_int_cache_glyph_get(fi, index);
+	LKU(fi->ft_mutex);
 	if (!fg) continue;
 
 	if (kern < 0) kern = 0;
@@ -564,79 +602,4 @@ evas_common_font_query_last_up_to_pos(RGBA_Font *fn, const char *text, int x, in
 	prev_index = index;
      }
    return -1;
-}
-
-EAPI int
-evas_common_font_query_suffix_needed_width(RGBA_Font *fn, const char *text, int w)
-{
-    int end_x = 0;
-
-//   int pen_x, pen_y;
-//   int prev_chr_end;
-//   int chr;
-//   int asc, desc;
-    FT_UInt prev_index = -1;
-
-    RGBA_Font_Int *fi = fn->fonts->data;
-//   FT_Face pface = NULL;
-
-//   pen_x = 0;
-//   pen_y = 0;
-    evas_common_font_size_use(fn);
-    int use_kerning = FT_HAS_KERNING(fi->src->ft.face);
-
-    if (w <= 0)
-        return -1;
-
-//   prev_index = 0;
-//   prev_chr_end = 0;
-//   asc = evas_common_font_max_ascent_get(fn);
-//   desc = evas_common_font_max_descent_get(fn);
-
-    int idx = strlen(text);
-    int prev_idx;
-
-    while (idx >= 0)
-    {
-        /* Advance idx back to previous codepoint */
-        idx--;
-        while ((idx > 0) && ((text[idx] & 0xc0) == 0x80))
-            idx--;
-        /* Get codepoint at idx */
-        int p = idx;
-        int gl = evas_common_font_utf8_get_next(text, &p);
-
-        FT_UInt index = evas_common_font_glyph_search(fn, &fi, gl);
-        RGBA_Font_Glyph *fg = evas_common_font_int_cache_glyph_get(fi, index);
-
-        int chr_w = fg->glyph->advance.x >> 16;
-
-        int kern = 0;
-        if (prev_index != -1) {
-            if (use_kerning) {
-                int kern;
-                if (evas_common_font_query_kerning(fi, index, prev_index, &kern)) {
-                    chr_w += kern;
-                }
-            }
-        } else {
-            /*
-             * First glyph (from the right), so subtract right-side bearing from
-             * the width
-             */
-            int right_bearing = (fg->glyph->advance.x >> 16)
-                - fg->glyph_out->bitmap.width - fg->glyph_out->left;
-
-            chr_w -= right_bearing;
-        }
-
-        if (end_x + chr_w > w)
-            return prev_idx;
-
-        end_x += chr_w;
-        prev_index = index;
-        prev_idx = idx;
-    }
-
-    return 0;
 }

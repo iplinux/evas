@@ -50,8 +50,6 @@ _interp(int x1, int x2, int p, FPc u1, FPc u2)
 static DATA32
 _interp_col(int x1, int x2, int p, DATA32 col1, DATA32 col2)
 {
-   DATA32 col;
-   
    x2 -= x1;
    p -= x1;
    p = (p << 8) / (x2 + 1);
@@ -364,7 +362,7 @@ evas_common_map4_rgba(RGBA_Image *src, RGBA_Image *dst,
 #ifdef BUILD_MMX
    evas_common_cpu_can_do(&mmx, &sse, &sse2);
 #endif   
-   if (!dc->cutout.rects)
+   if ((!dc->cutout.rects) && (!dc->clip.use))
      {
 #ifdef BUILD_MMX
         if (mmx)

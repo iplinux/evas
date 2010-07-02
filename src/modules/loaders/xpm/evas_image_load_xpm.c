@@ -10,15 +10,24 @@
 #include "evas_common.h"
 #include "evas_private.h"
 
-static int evas_image_load_file_head_xpm(Image_Entry *ie, const char *file, const char *key);
-static int evas_image_load_file_data_xpm(Image_Entry *ie, const char *file, const char *key);
+static int _evas_loader_xpm_log_dom = -1;
+
+#ifdef ERR
+# undef ERR
+#endif
+#define ERR(...) EINA_LOG_DOM_ERR(_evas_loader_xpm_log_dom, __VA_ARGS__)
+
+static Eina_Bool evas_image_load_file_head_xpm(Image_Entry *ie, const char *file, const char *key, int *error) EINA_ARG_NONNULL(1, 2, 4);
+static Eina_Bool evas_image_load_file_data_xpm(Image_Entry *ie, const char *file, const char *key, int *error) EINA_ARG_NONNULL(1, 2, 4);
 
 static Evas_Image_Load_Func evas_image_load_xpm_func =
 {
+  EINA_FALSE,
   evas_image_load_file_head_xpm,
   evas_image_load_file_data_xpm
 };
 
+// TODO: REWRITE THIS WITH THREAD SAFE VERSION NOT USING THIS HANDLE!!!!
 static FILE *rgb_txt = NULL;
 
 static void
@@ -103,8 +112,8 @@ xpm_parse_done(void)
 
 
 /** FIXME: clean this up and make more efficient  **/
-static int
-evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UNUSED__, int load_data)
+static Eina_Bool
+evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UNUSED__, int load_data, int *error)
 {
    DATA32             *ptr, *end;
    FILE               *f;
@@ -114,7 +123,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
    char               *line, s[256], tok[128], col[256], *tl;
    int                 lsz = 256;
    struct _cmap {
-      unsigned char    str[6];
+      char             str[6];
       unsigned char    transp;
       short            r, g, b;
    }                  *cmap;
@@ -122,7 +131,6 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
    short               lookup[128 - 32][128 - 32];
    int                 count, pixels;
 
-   if (!file) return 0;
    done = 0;
 //   transp = -1;
    transp = 1;
@@ -134,13 +142,15 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
    if (!f)
      {
         xpm_parse_done();
-        return 0;
+	*error = EVAS_LOAD_ERROR_DOES_NOT_EXIST;
+	return EINA_FALSE;
      }
    if (fread(s, 9, 1, f) != 1)
      {
         fclose(f);
 	xpm_parse_done();
-	return 0;
+	*error = EVAS_LOAD_ERROR_CORRUPT_FILE;
+	return EINA_FALSE;
      }
    rewind(f);
    s[9] = 0;
@@ -148,7 +158,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
      {
         fclose(f);
         xpm_parse_done();
-        return 0;
+	*error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;
      }
 
    i = 0;
@@ -169,7 +180,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
      {
         fclose(f);
         xpm_parse_done();
-        return 0;
+	*error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+	return EINA_FALSE;
      }
 
    backslash = 0;
@@ -206,7 +218,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 0;
+			    *error = EVAS_LOAD_ERROR_CORRUPT_FILE;
+			    return EINA_FALSE;
 			 }
                        if ((ncolors > 32766) || (ncolors < 1))
                          {
@@ -214,7 +227,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 0;
+			    *error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+			    return EINA_FALSE;
                          }
                        if ((cpp > 5) || (cpp < 1))
                          {
@@ -222,7 +236,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 0;
+			    *error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+			    return EINA_FALSE;
                          }
                        if ((w > IMG_MAX_SIZE) || (w < 1))
                          {
@@ -230,7 +245,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 0;
+			    *error = EVAS_LOAD_ERROR_GENERIC;
+			    return EINA_FALSE;
                          }
                        if ((h > IMG_MAX_SIZE) || (h < 1))
                          {
@@ -238,7 +254,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 0;
+			    *error = EVAS_LOAD_ERROR_GENERIC;
+			    return EINA_FALSE;
                          }
                        if (IMG_TOO_BIG(w, h))
                          {
@@ -246,7 +263,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 0;
+			    *error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+			    return EINA_FALSE;
                          }
 
                        if (!cmap)
@@ -257,7 +275,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                                 free(line);
                                 fclose(f);
                                 xpm_parse_done();
-                                return 0;
+				*error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+				return EINA_FALSE;
                               }
                          }
                        ie->w = w;
@@ -383,7 +402,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                                  free(line);
                                  fclose(f);
                                  xpm_parse_done();
-                                 return 0;
+				 *error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+				 return EINA_FALSE;
                               }
                             pixels = w * h;
                             end = ptr + pixels;
@@ -394,7 +414,8 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                             free(line);
                             fclose(f);
                             xpm_parse_done();
-                            return 1;
+			    *error = EVAS_LOAD_ERROR_NONE;
+			    return EINA_TRUE;
                          }
                     }
                   else
@@ -422,7 +443,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
 					   r = (unsigned char)cmap[lookup[lu1][0]].r;
                                            g = (unsigned char)cmap[lookup[lu1][0]].g;
                                            b = (unsigned char)cmap[lookup[lu1][0]].b;
-                                           *ptr = (r << 16) | (g << 8) | b;
+                                           *ptr = RGB_JOIN(r, g, b);
 					   ptr++;
                                            count++;
                                         }
@@ -431,7 +452,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                                            r = (unsigned char)cmap[lookup[lu1][0]].r;
                                            g = (unsigned char)cmap[lookup[lu1][0]].g;
                                            b = (unsigned char)cmap[lookup[lu1][0]].b;
-                                           *ptr = (0xff << 24) | (r << 16) | (g << 8) | b;
+                                           *ptr = ARGB_JOIN(0xff, r, g, b);
 					   ptr++;
                                            count++;
                                         }
@@ -448,7 +469,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
 				      r = (unsigned char)cmap[lookup[lu1][0]].r;
 				      g = (unsigned char)cmap[lookup[lu1][0]].g;
 				      b = (unsigned char)cmap[lookup[lu1][0]].b;
-				      *ptr = (0xff << 24) | (r << 16) | (g << 8) | b;
+				      *ptr = ARGB_JOIN(0xff, r, g, b);
 				      ptr++;
 				      count++;
                                    }
@@ -472,7 +493,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
 					   r = (unsigned char)cmap[lookup[lu1][lu2]].r;
                                            g = (unsigned char)cmap[lookup[lu1][lu2]].g;
                                            b = (unsigned char)cmap[lookup[lu1][lu2]].b;
-                                           *ptr = (r << 16) | (g << 8) | b;
+                                           *ptr = RGB_JOIN(r, g, b);
 					   ptr++;
                                            count++;
                                         }
@@ -481,7 +502,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                                            r = (unsigned char)cmap[lookup[lu1][lu2]].r;
                                            g = (unsigned char)cmap[lookup[lu1][lu2]].g;
                                            b = (unsigned char)cmap[lookup[lu1][lu2]].b;
-                                           *ptr = (0xff << 24) | (r << 16) | (g << 8) | b;
+                                           *ptr = ARGB_JOIN(0xff, r, g, b);
 					   ptr++;
                                            count++;
                                         }
@@ -501,7 +522,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
 				      r = (unsigned char)cmap[lookup[lu1][lu2]].r;
 				      g = (unsigned char)cmap[lookup[lu1][lu2]].g;
 				      b = (unsigned char)cmap[lookup[lu1][lu2]].b;
-				      *ptr = (0xff << 24) | (r << 16) | (g << 8) | b;
+				      *ptr = ARGB_JOIN(0xff, r, g, b);
 				      ptr++;
 				      count++;
                                    }
@@ -531,7 +552,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                                                      r = (unsigned char)cmap[j].r;
                                                      g = (unsigned char)cmap[j].g;
                                                      b = (unsigned char)cmap[j].b;
-						     *ptr = (r << 16) | (g << 8) | b;
+						     *ptr = RGB_JOIN(r, g, b);
 						     ptr++;
                                                      count++;
                                                   }
@@ -540,7 +561,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
 						     r = (unsigned char)cmap[j].r;
                                                      g = (unsigned char)cmap[j].g;
                                                      b = (unsigned char)cmap[j].b;
-						     *ptr = (0xff << 24) | (r << 16) | (g << 8) | b;
+						     *ptr = ARGB_JOIN(0xff, r, g, b);
 						     ptr++;
                                                      count++;
                                                   }
@@ -568,7 +589,7 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
                                                 r = (unsigned char)cmap[j].r;
                                                 g = (unsigned char)cmap[j].g;
                                                 b = (unsigned char)cmap[j].b;
-						*ptr = (0xff << 24) | (r << 16) | (g << 8) | b;
+						*ptr = ARGB_JOIN(0xff, r, g, b);
 						ptr++;
 						count++;
                                                 break;
@@ -615,26 +636,32 @@ evas_image_load_file_xpm(Image_Entry *ie, const char *file, const char *key __UN
    if (f) fclose(f);
 
    xpm_parse_done();
-
-   return 1;
+   *error = EVAS_LOAD_ERROR_NONE;
+   return EINA_TRUE;
 }
 
-static int
-evas_image_load_file_head_xpm(Image_Entry *ie, const char *file, const char *key)
+static Eina_Bool
+evas_image_load_file_head_xpm(Image_Entry *ie, const char *file, const char *key, int *error)
 {
-  return evas_image_load_file_xpm(ie, file, key, 0);
+   return evas_image_load_file_xpm(ie, file, key, 0, error);
 }
 
-static int
-evas_image_load_file_data_xpm(Image_Entry *ie, const char *file, const char *key)
+static Eina_Bool
+evas_image_load_file_data_xpm(Image_Entry *ie, const char *file, const char *key, int *error)
 {
-  return evas_image_load_file_xpm(ie, file, key, 1);
+   return evas_image_load_file_xpm(ie, file, key, 1, error);
 }
 
 static int
 module_open(Evas_Module *em)
 {
    if (!em) return 0;
+   _evas_loader_xpm_log_dom = eina_log_domain_register("EvasLoaderXpm", EVAS_DEFAULT_LOG_COLOR);
+   if (_evas_loader_xpm_log_dom < 0)
+     {
+        EINA_LOG_ERR("Impossible to create a log domain for the LoaderXpm loader.\n");
+        return 0;
+     }
    em->functions = (void *)(&evas_image_load_xpm_func);
    return 1;
 }
@@ -642,6 +669,7 @@ module_open(Evas_Module *em)
 static void
 module_close(Evas_Module *em)
 {
+   eina_log_domain_unregister(_evas_loader_xpm_log_dom);
 }
 
 static Evas_Module_Api evas_modapi =

@@ -52,7 +52,7 @@ static void eng_line_draw(void *data, void *context, void *surface, int x1, int 
 
 static void *eng_polygon_point_add(void *data, void *context, void *polygon, int x, int y);
 static void *eng_polygon_points_clear(void *data, void *context, void *polygon);
-static void eng_polygon_draw(void *data, void *context, void *surface, void *polygon);
+static void eng_polygon_draw(void *data, void *context, void *surface, void *polygon, int x, int y);
 
 static void *eng_gradient_new(void *data);
 static void eng_gradient_free(void *data, void *gradient);
@@ -267,6 +267,7 @@ eng_info(Evas *e)
    info = calloc(1, sizeof(Evas_Engine_Info_Cairo_X11));
    if (!info) return NULL;
    info->magic.magic = rand();   
+   info->render_mode = EVAS_RENDER_MODE_BLOCKING;
    return info;
    e = NULL;
 }
@@ -764,7 +765,7 @@ eng_polygon_points_clear(void *data, void *context, void *polygon)
 }
 
 static void
-eng_polygon_draw(void *data, void *context, void *surface, void *polygon)
+eng_polygon_draw(void *data, void *context, void *surface, void *polygon, int x, int y)
 {
    Render_Engine *re;
    Evas_Cairo_Context *ctxt;
@@ -780,9 +781,9 @@ eng_polygon_draw(void *data, void *context, void *surface, void *polygon)
    if (pt)
      {
 	Eina_List *l;
-	cairo_move_to(ctxt->cairo, pt->x, pt->y);
+	cairo_move_to(ctxt->cairo, pt->x + x, pt->y + y);
 	EINA_LIST_FOREACH(poly->points->next, l, pt)
-	  cairo_line_to(ctxt->cairo, pt->x, pt->y);
+	  cairo_line_to(ctxt->cairo, pt->x + x, pt->y + y);
      }
    r = ctxt->col.r;
    g = ctxt->col.g;
@@ -915,14 +916,17 @@ eng_image_load(void *data, char *file, char *key, int *error, Evas_Image_Load_Op
 {
    Render_Engine *re;
    Evas_Cairo_Image *im;
-   
+
    re = (Render_Engine *)data;
-   if (error) *error = 0;
-
    im = calloc(1, sizeof(Evas_Cairo_Image));
-   if (!im) return NULL;
+   if (!im)
+     {
+	*error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+	return NULL;
+     }
 
-   im->im = evas_common_load_image_from_file(file, key, lo);
+   *error = EVAS_LOAD_ERROR_NONE;
+   im->im = evas_common_load_image_from_file(file, key, lo, error);
    if (!im->im)
      {
 	free(im);

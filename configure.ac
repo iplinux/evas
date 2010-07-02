@@ -1,8 +1,38 @@
-# get rid of that stupid cache mechanism
-rm -f config.cache
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+m4_define([v_maj], [0])
+m4_define([v_min], [9])
+m4_define([v_mic], [9])
+m4_define([v_rev], m4_esyscmd([(svnversion "${SVN_REPO_PATH:-.}" | grep -v export || echo 0) | awk -F : '{printf("%s\n", $1);}' | tr -d ' :MSP\n']))
+m4_if(v_rev, [0], [m4_define([v_rev], m4_esyscmd([git log 2> /dev/null | (grep -m1 git-svn-id || echo 0) | sed -e 's/.*@\([0-9]*\).*/\1/' | tr -d '\n']))])
+##--   When released, remove the dnl on the below line
+dnl m4_undefine([v_rev])
+##--   When doing snapshots - change soname. remove dnl on below line
+m4_define([relname], [ver-svn-06])
+m4_define([v_rel], [-release relname])
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+m4_ifdef([v_rev], [m4_define([v_ver], [v_maj.v_min.v_mic.v_rev])],
+[m4_define([v_ver], [v_maj.v_min.v_mic])])
+m4_define([lt_rev], m4_eval(v_maj + v_min))
+m4_define([lt_cur], v_mic)
+m4_define([lt_age], v_min)
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 
-AC_INIT([evas], [0.9.9.063], [enlightenment-devel@lists.sourceforge.net])
-release="ver-svn-05"
+# rw_PROG_OBJC_WORKS
+# Check whether the Objective C compiler works.
+AC_DEFUN([rw_PROG_OBJC_WORKS],
+[AC_REQUIRE([AC_PROG_OBJC])dnl
+AC_CACHE_CHECK([whether the Objective C compiler works],
+               [rw_cv_prog_objc_works],
+               [AC_LANG_PUSH([Objective C])
+                AC_LINK_IFELSE([AC_LANG_PROGRAM([], [])],
+                               [rw_cv_prog_objc_works=yes],
+                               [rw_cv_prog_objc_works=no])
+                AC_LANG_POP([Objective C])])
+])
+
+AC_INIT([evas], [v_ver], [enlightenment-devel@lists.sourceforge.net])
 AC_PREREQ([2.52])
 AC_CONFIG_SRCDIR([configure.ac])
 AC_CONFIG_MACRO_DIR([m4])
@@ -18,13 +48,22 @@ AC_LIBTOOL_WIN32_DLL
 define([AC_LIBTOOL_LANG_F77_CONFIG], [:])dnl
 AC_PROG_LIBTOOL
 
-VMAJ=`echo $PACKAGE_VERSION | awk -F. '{printf("%s", $1);}'`
-VMIN=`echo $PACKAGE_VERSION | awk -F. '{printf("%s", $2);}'`
-VMIC=`echo $PACKAGE_VERSION | awk -F. '{printf("%s", $3);}'`
-SNAP=`echo $PACKAGE_VERSION | awk -F. '{printf("%s", $4);}'`
-version_info=`expr $VMAJ + $VMIN`":$VMIC:$VMIN"
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+m4_ifdef([v_rev], , [m4_define([v_rev], [0])])
+m4_ifdef([v_rel], , [m4_define([v_rel], [])])
+AC_DEFINE_UNQUOTED(VMAJ, [v_maj], [Major version])
+AC_DEFINE_UNQUOTED(VMIN, [v_min], [Minor version])
+AC_DEFINE_UNQUOTED(VMIC, [v_mic], [Micro version])
+AC_DEFINE_UNQUOTED(VREV, [v_rev], [Revison])
+version_info="lt_rev:lt_cur:lt_age"
+release_info="v_rel"
 AC_SUBST(version_info)
+AC_SUBST(release_info)
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
+##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##--##
 
+EFL_CHECK_PATH_MAX
 
 ### Needed information
 
@@ -33,11 +72,9 @@ case "$host_os" in
       MODULE_ARCH="$host_os-$host_cpu"
       ;;
    *)
-      release_info="-release $release"
-      MODULE_ARCH="$host_os-$host_cpu-$release"
+      MODULE_ARCH="$host_os-$host_cpu-relname"
       ;;
 esac
-AC_SUBST(release_info)
 AC_SUBST(MODULE_ARCH)
 AC_DEFINE_UNQUOTED(MODULE_ARCH, "$MODULE_ARCH", "Module architecture")
 
@@ -54,6 +91,7 @@ want_evas_engine_buffer="yes"
 want_evas_engine_software_xlib="no"
 want_evas_engine_xrender_x11="no"
 want_evas_engine_gl_x11="no"
+want_evas_engine_gl_sdl="no"
 want_evas_engine_cairo_x11="no"
 want_evas_engine_software_xcb="no"
 want_evas_engine_xrender_xcb="no"
@@ -79,6 +117,8 @@ want_evas_image_loader_png="yes"
 want_evas_image_loader_svg="yes"
 want_evas_image_loader_tiff="yes"
 want_evas_image_loader_xpm="yes"
+want_evas_image_loader_bmp="yes"
+want_evas_image_loader_tga="yes"
 
 want_evas_font_loader_eet="yes"
 
@@ -136,6 +176,19 @@ AC_ARG_ENABLE([simple-x11],
 
 
 ### Checks for programs
+
+m4_ifdef([AC_PROG_OBJC],
+   [
+    AC_PROG_OBJC
+    _AM_DEPENDENCIES(OBJC)
+   ],
+   [
+    AC_CHECK_TOOL([OBJC], [gcc])
+    AC_SUBST([OBJC])
+    AC_SUBST([OBJCFLAGS])
+   ])
+
+rw_PROG_OBJC_WORKS
 
 AC_PROG_CXX
 AC_PROG_CC
@@ -243,11 +296,6 @@ fi
 ### Checks for header files
 AC_HEADER_STDC
 
-# fnmatch.h
-AC_CHECK_HEADER([fnmatch.h],
-   [dummy="yes"],
-   [AC_MSG_ERROR([Cannot find fnmatch.h. Make sure your CFLAGS environment variable contains include lines for the location of this file. MinGW users: see the INSTALL file])])
-
 
 ### Checks for types
 
@@ -298,16 +346,7 @@ AC_SUBST(lt_enable_auto_import)
 AC_FUNC_ALLOCA
 
 # fnmatch
-AC_CHECK_FUNCS([fnmatch], [res="yes"], [res="no"])
-if test "x$res" = "xno"; then
-   AC_SEARCH_LIBS([fnmatch],
-      [fnmatch evil iberty],
-      [res="yes"],
-      [res="no"])
-   if test "x$res" = "xno"; then
-      AC_MSG_ERROR([Cannot find fnmatch() in neither libc nor libfnmatch, nor libiberty, nor libevil])
-   fi
-fi
+EFL_CHECK_FNMATCH([], [AC_MSG_ERROR([Cannot find fnmatch()])])
 
 # dlopen
 dlopen_libs=""
@@ -471,6 +510,8 @@ EVAS_CHECK_ENGINE([gl-glew], [${want_evas_engine_gl_glew}], [no], [OpenGL Glew])
 
 EVAS_CHECK_ENGINE([software-sdl], [${want_evas_engine_software_sdl}], [no], [Software SDL])
 
+EVAS_CHECK_ENGINE([gl-sdl], [${want_evas_engine_gl_sdl}], [yes], [OpenGL SDL])
+
 EVAS_CHECK_ENGINE([fb], [${want_evas_engine_fb}], [no], [Framebuffer])
 
 EVAS_CHECK_ENGINE([directfb], [${want_evas_engine_directfb}], [no], [DirectFB])
@@ -494,19 +535,36 @@ EVAS_CHECK_ENGINE([software-16-wince], [${want_evas_engine_software_16_wince}], 
 
 # common gl
 have_evas_engine_gl_common="no"
-if test "x$have_evas_engine_gl_x11" = "xyes" -o "x$have_evas_engine_gl_glew" = "xyes"; then
-   AC_DEFINE(BUILD_ENGINE_GL_COMMON, 1, [Generic OpenGL Rendering Support])
+if test "x$have_evas_engine_gl_x11" = "xyes" \
+   || test "x$have_evas_engine_gl_x11" = "xstatic" \
+   || test "x$have_evas_engine_gl_glew" = "xyes" \
+   || test "x$have_evas_engine_gl_glew" = "xstatic" \
+   || test "x$have_evas_engine_gl_sdl" = "xyes" \
+   || test "x$have_evas_engine_gl_sdl" = "xstatic"; then
    have_evas_engine_gl_common="yes"
-   evas_engine_gl_common_libs=""
 fi
 
-if test "x$have_evas_engine_gl_glew" = "xyes" ; then
-   have_evas_engine_gl_common="yes"
+if test "x$have_evas_engine_gl_common" = "xyes"; then
    evas_engine_gl_common_libs=""
+   AC_DEFINE(BUILD_ENGINE_GL_COMMON, [1], [Generic OpenGL Rendering Support])
 fi
+
 AC_SUBST([evas_engine_gl_common_libs])
 
-AM_CONDITIONAL(BUILD_ENGINE_GL_COMMON, test "x$have_evas_engine_gl_common" = "xyes")
+AM_CONDITIONAL(BUILD_ENGINE_GL_COMMON, [test "x$have_evas_engine_gl_common" = "xyes"])
+
+# gl_sdl
+if test "x$have_evas_engine_gl_sdl" = "xyes" || test "x$have_evas_engine_gl_sdl" = "xstatic" ; then
+   AC_CHECK_DECL(SDL_GL_CONTEXT_MAJOR_VERSION,
+      [AC_DEFINE(HAVE_SDL_GL_CONTEXT_VERSION, [1], [SDL_GL version attributes present])],,
+      [#include <SDL/SDL_video.h>])
+fi
+
+if test "x$gl_flavor_gles" = "xyes"; then
+   AC_CHECK_DECL(SDL_OPENGLES,
+      [AC_DEFINE(HAVE_SDL_FLAG_OPENGLES, [1], [SDL_OPENGLES flag is present])],,
+      [#include <SDL/SDL_video.h>])
+fi
 
 # SDL primitive
 sdl_primitive="no"
@@ -636,6 +694,10 @@ EVAS_CHECK_IMAGE_LOADER([Tiff], [${want_evas_image_loader_tiff}])
 
 EVAS_CHECK_IMAGE_LOADER([XPM], [${want_evas_image_loader_xpm}])
 
+EVAS_CHECK_IMAGE_LOADER([BMP], [${want_evas_image_loader_bmp}])
+
+EVAS_CHECK_IMAGE_LOADER([TGA], [${want_evas_image_loader_tga}])
+
 
 #####################################################################
 ## Cpu based optimizations
@@ -728,6 +790,38 @@ else
 fi
 
 #######################################
+## Async Renderer
+build_async_render="no"
+AC_MSG_CHECKING(whether to build Asynchronously Threaded Pipe Rendering support)
+AC_ARG_ENABLE(async-render,
+  AC_HELP_STRING([--enable-async-render], [enable asynchronously threaded pipe rendering support]),
+  [ build_async_render=$enableval ]
+)
+AC_MSG_RESULT($build_async_render)
+
+AC_MSG_CHECKING(whether we can build Asynchronously Threaded Pipe Rendering support)
+if test \( "x$build_async_render" = "xyes" \); then
+  AC_MSG_RESULT(yes)
+  AC_DEFINE(EVAS_FRAME_QUEUING, 1, [Build async render support])
+  build_async_render="yes"
+  AC_DEFINE(BUILD_PIPE_RENDER, 1, [Build pipe render support])
+  build_pipe_render="yes"
+  need_pthreads="yes"
+
+  PKG_CHECK_MODULES([XEXT],
+     [xext < 1.1.1],
+     [ build_avoid_libXext_bug=yes ],
+     [ build_avoid_libXext_bug=no ]
+  )
+  if test \( "x$build_avoid_libXext_bug" = "xyes" \); then
+    AC_DEFINE(LIBXEXT_VERSION_LOW, 1, [To avoid bug on old libXext version])
+  fi
+else
+  AC_MSG_RESULT(no)
+  build_async_render="no"
+fi
+
+#######################################
 ## Async events
 build_async_events="auto"
 AC_MSG_CHECKING(whether to build Async Events support)
@@ -738,11 +832,10 @@ AC_ARG_ENABLE(async-events,
 AC_MSG_RESULT($build_async_events)
 
 AC_MSG_CHECKING(whether we can build Async Events support)
-if test \( "x$build_async_events" = "xyes" -o "x$build_async_events" = "xauto" \) -a "x$has_pthreads" = "xyes"; then
+if test "x$build_async_events" = "xyes" || test "x$build_async_events" = "xauto" ; then
   AC_MSG_RESULT(yes)
   AC_DEFINE(BUILD_ASYNC_EVENTS, 1, [Build async events support])
   build_async_events="yes"
-  need_pthreads="yes"
 else
   AC_MSG_RESULT(no)
   build_async_events="no"
@@ -790,6 +883,9 @@ case $host_cpu in
   x86_64)
     build_cpu_mmx="yes"
     ;;
+  amd64)
+    build_cpu_mmx="yes"
+    ;;
 esac
 AC_MSG_CHECKING(whether to build mmx code)
 AC_ARG_ENABLE(cpu-mmx,
@@ -820,6 +916,9 @@ case $host_cpu in
     build_cpu_sse="yes"
     ;;
   x86_64)
+    build_cpu_sse="yes"
+    ;;
+  amd64)
     build_cpu_sse="yes"
     ;;
 esac
@@ -979,8 +1078,47 @@ AC_MSG_RESULT($want_evas_magic_debug)
 
 AM_CONDITIONAL(EVAS_MAGIC_DEBUG, test "x$want_evas_magic_debug" = "xyes")
 if test "x$want_evas_magic_debug" = "xyes"; then
-  AC_DEFINE(EVAS_MAGIC_DEBUG, 1, [complain when peole pass in wrong object types etc.])
+  AC_DEFINE(EVAS_MAGIC_DEBUG, 1, [complain when people pass in wrong object types etc.])
 fi
+
+
+#######################################
+## Word Caching
+want_word_cache="no"
+AC_MSG_CHECKING(whether to enable caching of rendered words)
+AC_ARG_ENABLE(word-cache,
+  AC_HELP_STRING(
+    [--enable-word-cache],
+    [Enable experimental word caching to speed up rendering [[default=disabled]]]
+  ),
+  [ want_word_cache="$enableval" ]
+)
+AC_MSG_RESULT($want_word_cache)
+
+AM_CONDITIONAL(WORD_CACHE, test "x$want_word_cache" = "xyes")
+if test "x$want_word_cache" = "xyes"; then
+  AC_DEFINE(WORD_CACHE, 1, [Experimental word caching to speed up text rendering.])
+fi
+
+#######################################
+## Metric Caching
+want_metric_cache="no"
+AC_MSG_CHECKING(whether to enable caching of rendered metrics)
+AC_ARG_ENABLE(metric-cache,
+  AC_HELP_STRING(
+    [--enable-metric-cache],
+    [Enable experimental metric caching to speed up rendering [[default=disabled]]]
+  ),
+  [ want_metric_cache="$enableval" ]
+)
+AC_MSG_RESULT($want_metric_cache)
+
+AM_CONDITIONAL(METRIC_CACHE, test "x$want_metric_cache" = "xyes")
+if test "x$want_metric_cache" = "xyes"; then
+  AC_DEFINE(METRIC_CACHE, 1, [Experimental metric caching to speed up text rendering.])
+fi
+
+
 
 #####################################################################
 ## ARGB engine options
@@ -1200,6 +1338,38 @@ if test x$want_valgrind = "xyes"; then
   )
 fi
 
+## Examples
+
+install_examples="yes"
+AC_ARG_ENABLE([install-examples],
+   AC_HELP_STRING([--disable-install-examples],
+                  [disable installing examples (compiled or just source).
+                   @<:@default==enabled@:>@]),
+   [
+    if test "x${enableval}" = "xyes" ; then
+       install_examples="yes"
+    else
+       install_examples="no"
+    fi
+   ],
+   [install_examples="yes"])
+AM_CONDITIONAL([INSTALL_EXAMPLES], [test "x${install_examples}" = "xyes"])
+
+build_examples="no"
+AC_ARG_ENABLE([build-examples],
+   AC_HELP_STRING([--enable-build-examples],
+                  [enable building examples. @<:@default==disabled@:>@]),
+   [
+    if test "x${enableval}" = "xyes" ; then
+       build_examples="yes"
+    else
+       build_examples="no"
+    fi
+   ],
+   [build_examples="no"])
+AM_CONDITIONAL([BUILD_EXAMPLES], [test "x${build_examples}" = "xyes"])
+
+
 #####################################################################
 ## Fill in flags
 
@@ -1218,6 +1388,7 @@ evas-directfb.pc
 evas-fb.pc
 evas-opengl-glew.pc
 evas-opengl-x11.pc
+evas-opengl-sdl.pc
 evas-quartz.pc
 evas-software-buffer.pc
 evas-software-x11.pc
@@ -1264,6 +1435,7 @@ src/modules/engines/directfb/Makefile
 src/modules/engines/gl_common/Makefile
 src/modules/engines/gl_glew/Makefile
 src/modules/engines/gl_x11/Makefile
+src/modules/engines/gl_sdl/Makefile
 src/modules/engines/quartz/Makefile
 src/modules/engines/xrender_x11/Makefile
 src/modules/engines/software_sdl/Makefile
@@ -1279,6 +1451,8 @@ src/modules/loaders/jpeg/Makefile
 src/modules/loaders/png/Makefile
 src/modules/loaders/tiff/Makefile
 src/modules/loaders/xpm/Makefile
+src/modules/loaders/bmp/Makefile
+src/modules/loaders/tga/Makefile
 src/modules/loaders/svg/Makefile
 src/modules/loaders/pmaps/Makefile
 src/modules/savers/Makefile
@@ -1288,6 +1462,7 @@ src/modules/savers/jpeg/Makefile
 src/modules/savers/png/Makefile
 src/modules/savers/tiff/Makefile
 src/lib/include/Makefile
+src/examples/Makefile
 README
 evas.spec
 ])
@@ -1316,7 +1491,12 @@ echo "Engines:"
 echo "  Software Memory Buffer.....: $have_evas_engine_buffer"
 echo "  Software X11...............: $have_evas_engine_software_x11 (Xlib: $have_evas_engine_software_xlib) (XCB: $have_evas_engine_software_xcb)"
 echo "  XRender X11................: $have_evas_engine_xrender_x11 (XCB: $have_evas_engine_xrender_xcb)"
-echo "  OpenGL X11.................: $have_evas_engine_gl_x11 (GLES: $gl_flavor_gles) (SGX: $gles_variety_sgx) (s3c6410: $gles_variety_s3c6410)"
+echo $ECHO_N "  OpenGL X11.................: $have_evas_engine_gl_x11 $ECHO_C"
+if test "x$have_evas_engine_gl_x11" = "xyes"; then
+   echo "(GLES: $gl_flavor_gles) (SGX: $gles_variety_sgx) (s3c6410: $gles_variety_s3c6410)"
+else
+   echo
+fi
 #echo "  Cairo X11..................: $have_evas_engine_cairo_x11"
 echo "  Software GDI...............: $have_evas_engine_software_gdi"
 echo "  Software DirectDraw........: $have_evas_engine_software_ddraw"
@@ -1324,6 +1504,12 @@ echo "  Direct3d...................: $have_evas_engine_direct3d"
 echo "  Quartz.....................: $have_evas_engine_quartz"
 echo "  OpenGL Glew................: $have_evas_engine_gl_glew"
 echo "  Software SDL...............: $have_evas_engine_software_sdl (primitive: $sdl_primitive)"
+echo $ECHO_N "  OpenGL SDL.................: $have_evas_engine_gl_sdl $ECHO_C"
+if test "x$have_evas_engine_gl_sdl" = "xyes"; then
+   echo "(GLES: $gl_flavor_gles) (SGX: $gles_variety_sgx) (s3c6410: $gles_variety_s3c6410)"
+else
+   echo
+fi
 echo "  Software Framebuffer.......: $have_evas_engine_fb"
 echo "  DirectFB...................: $have_evas_engine_directfb"
 #echo "  Software Qtopia............: $have_evas_engine_software_qtopia"
@@ -1344,6 +1530,7 @@ echo "  PNG.....................: $have_evas_image_loader_png"
 echo "  SVG.....................: $have_evas_image_loader_svg"
 echo "  TIFF....................: $have_evas_image_loader_tiff"
 echo "  XPM.....................: $have_evas_image_loader_xpm"
+echo "  BMP.....................: $have_evas_image_loader_bmp"
 # FIXME: need to add modular image loader system
 # FIXME: add more image loader modules
 echo
@@ -1369,8 +1556,12 @@ echo "  MAGIC_DEBUG.............: $want_evas_magic_debug"
 echo "  Cache Server............: $want_evas_cserve"
 echo
 echo "  Threaded Pipe Rendering.: $build_pipe_render"
+echo "  Async Pipe Rendering....: $build_async_render"
 echo "  Async Events............: $build_async_events"
 echo "  Async Image Preload.....: $build_async_preload"
+echo
+echo "  Word Cache..............: $want_word_cache"
+echo "  Metric Cache............: $want_metric_cache"
 echo
 echo "ARGB Software Engine Options:"
 echo "  Sampling Scaler.........: $scaler_sample"
@@ -1422,12 +1613,16 @@ echo "  32bpp Rotation 180......: $conv_32_rgb_rot_180"
 echo "  32bpp Rotation 270......: $conv_32_rgb_rot_270"
 echo
 echo "Documentation.............: ${build_doc}"
+echo "Examples..................: install:${install_examples} build:${build_examples}"
 echo
-echo "------------------------------------------------------------------------"
+echo "Compilation............: make (or gmake)"
+echo "  CPPFLAGS.............: $CPPFLAGS"
+echo "  CFLAGS...............: $CFLAGS"
+echo "  CXXFLAGS.............: $CXXFLAGS"
+echo "  LDFLAGS..............: $LDFLAGS"
 echo
-echo "Now type 'make' ('gmake' on some systems) to compile $PACKAGE,"
-echo "and then afterwards as root (or the user who will install this), type"
-echo "'make install'. Change users with 'su' or 'sudo' appropriately."
+echo "Installation...........: make install (as root if needed, with 'su' or 'sudo')"
+echo "  prefix...............: $prefix"
 echo
 if test "x${have_static_module}" = "xyes" ; then
 echo -e "\0033\01331;31mWarning\0033\01331;0m: You are trying to link statically one or more modules to Evas."

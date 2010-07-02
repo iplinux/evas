@@ -126,6 +126,7 @@ eng_info(Evas *e)
    info = calloc(1, sizeof(Evas_Engine_Info_Buffer));
    if (!info) return NULL;
    info->magic.magic = rand();
+   info->render_mode = EVAS_RENDER_MODE_BLOCKING;
    return info;
    e = NULL;
 }
@@ -306,8 +307,7 @@ eng_output_redraws_next_update_push(void *data, void *surface, int x, int y, int
 
    re = (Render_Engine *)data;
 #ifdef BUILD_PIPE_RENDER
-   evas_common_pipe_begin(surface);
-   evas_common_pipe_flush(surface);
+   evas_common_pipe_map4_begin(surface);
 #endif   
    evas_buffer_outbuf_buf_push_updated_region(re->ob, surface, x, y, w, h);
    evas_buffer_outbuf_buf_free_region_for_update(re->ob, surface);
