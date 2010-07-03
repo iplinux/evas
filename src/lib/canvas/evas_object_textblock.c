@@ -366,7 +366,6 @@ _nodes_next_merge(const Evas_Object *obj, Evas_Object_Textblock_Node *cur)
 {
     Evas_Object_Textblock *o;
     Evas_Object_Textblock_Node *next;
-    Evas_Object_Textblock_Node *nextnext;
     Eina_List *l;
     Evas_Textblock_Cursor *cursor;
     int cur_len;
@@ -380,9 +379,9 @@ _nodes_next_merge(const Evas_Object *obj, Evas_Object_Textblock_Node *cur)
         return;
 
     /* Merge text */
-    cur_len = eina_strbuf_length_get(cur->len);
+    cur_len = eina_strbuf_length_get(cur->text);
     eina_strbuf_append_length(cur->text, eina_strbuf_string_get(next->text),
-            eina_strbug_length_get(next->text));
+            eina_strbuf_length_get(next->text));
 
     /* Remove "next" from list */
     o = obj->object_data;
@@ -1372,8 +1371,6 @@ _layout_format_ascent_descent_adjust(Ctxt *c, Evas_Object_Textblock_Format *fmt,
 
    if (fmt->font.font)
      {
-        int height = evas_common_font_get_line_advance(fmt->font.font);
-
         ascent = c->ENFN->font_ascent_get(c->ENDT, fmt->font.font);
         descent = c->ENFN->font_descent_get(c->ENDT, fmt->font.font);
 
@@ -2257,6 +2254,10 @@ _layout(const Evas_Object *obj, int calc_only, int w, int h, int *w_ret, int *h_
    c->line_no = 0;
    c->align = 0.0;
 
+   /* Calculate maxascent, maxdescent for current line */
+   int maxascent = 0;
+   int maxdescent = 0;
+
    _format_command_init();
    /* setup default base style */
    if ((c->o->style) && (c->o->style->default_tag))
@@ -2296,6 +2297,9 @@ _layout(const Evas_Object *obj, int calc_only, int w, int h, int *w_ret, int *h_
               */
           }
      }
+
+   _layout_format_ascent_descent_adjust(c, fmt, &maxascent, &maxdescent);
+
    EINA_INLIST_FOREACH(c->o->nodes, n)
      {
 	if (!c->ln) _layout_line_new(c, fmt);
@@ -2373,11 +2377,11 @@ _layout(const Evas_Object *obj, int calc_only, int w, int h, int *w_ret, int *h_
                                       size = SIZE_REL;
                                       if (vsize == VSIZE_FULL)
                                         {
-                                           sz = c->maxdescent + c->maxascent;
+                                           sz = maxdescent + maxascent;
                                         }
                                       else if (vsize == VSIZE_ASCENT)
                                         {
-                                           sz = c->maxascent;
+                                           sz = maxascent;
                                         }
                                       w = (w * sz) / h;
                                       h = sz;
@@ -2403,8 +2407,8 @@ _layout(const Evas_Object *obj, int calc_only, int w, int h, int *w_ret, int *h_
                   fi->formatme = 1;
                   fi->w = w;
                   fi->h = h;
-                  fi->ascent = c->maxascent;
-                  fi->descent = c->maxdescent;
+                  fi->ascent = maxascent;
+                  fi->descent = maxdescent;
                   c->x = x2;
                   handled = 1;
                }
