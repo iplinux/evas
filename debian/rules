@@ -24,6 +24,8 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 	--disable-xrender-x11 \
 	--disable-gl-x11 \
 	--enable-software-xcb=static \
+	--enable-software-8-x11=static \
+	--enable-static-software-8 \
 	--disable-xrender-xcb \
 	--disable-software-sdl \
 	--disable-fb \
