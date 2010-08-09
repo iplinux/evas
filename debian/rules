@@ -31,7 +31,7 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 	--disable-fb \
 	--disable-directfb \
 	--disable-software-16-x11 \
-	--disable-software-generic \
+	--enable-static-software-generic \
 	--disable-image-loader-edb \
 	--enable-image-loader-eet=static \
 	--disable-font-loader-eet \
