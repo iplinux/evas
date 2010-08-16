@@ -601,6 +601,10 @@ soft8_image_alpha_set(Soft8_Image * im, int have_alpha)
                                                     im->cache_entry.w,
                                                     im->cache_entry.h);
 
+   _evas_common_soft8_image_surface_alloc(&new_im->cache_entry,
+                                          im->cache_entry.w,
+                                          im->cache_entry.h);
+
    return new_im;
 }
 
