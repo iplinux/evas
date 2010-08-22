@@ -1,3 +1,9 @@
+evas (0.9.9.49898-3) zelazny; urgency=low
+
+  * common_8: enable image cache shutdown
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Sun, 22 Aug 2010 15:14:39 +0200
+
 evas (0.9.9.49898-2) zelazny; urgency=low
 
   * Add 8bpp xcb evas engine, disable 32bpp engine
