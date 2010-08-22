@@ -92,8 +92,8 @@ evas_common_soft8_image_shutdown(void)
 // with no more objects exist anywhere.
 
 // ENABLE IT AGAIN, hope it is fixed. Gustavo @ January 22nd, 2009.
-        //evas_cache_image_shutdown(eci);
-        //eci = NULL;
+        evas_cache_image_shutdown(eci);
+        eci = NULL;
      }
 }
 
