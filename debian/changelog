@@ -1,3 +1,9 @@
+evas (0.9.9.49898-4) zelazny; urgency=low
+
+  * Enable TIFF support (#712)
+
+ -- Mikhail Gusarov <dottedmag@dottedmag.net>  Mon, 03 Jan 2011 09:25:57 +0100
+
 evas (0.9.9.49898-3) zelazny; urgency=low
 
   * common_8: enable image cache shutdown
