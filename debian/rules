@@ -38,7 +38,7 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 	--disable-image-loader-pmaps \
 	--enable-image-loader-png=static \
 	--disable-image-loader-svg \
-	--disable-image-loader-tiff \
+	--enable-image-loader-tiff \
 	--enable-image-loader-xpm \
 	--disable-pthreads \
 	--disable-pipe-render \
