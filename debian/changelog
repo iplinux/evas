@@ -1,3 +1,21 @@
+evas (0.9.9.49898-3) zelazny; urgency=low
+
+  * common_8: enable image cache shutdown
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Sun, 22 Aug 2010 15:14:39 +0200
+
+evas (0.9.9.49898-2) zelazny; urgency=low
+
+  * Add 8bpp xcb evas engine, disable 32bpp engine
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Wed, 18 Aug 2010 21:43:42 +0200
+
+evas (0.9.9.49898-1) zelazny; urgency=low
+
+  * svn-06 snapshot
+
+ -- Alexander Kerner <lunohod@openinkpot.org>  Fri, 02 Jul 2010 18:37:30 +0200
+
 evas (0.9.9.063-9) zelazny; urgency=low
 
   * Add ellipsis support to TEXTBLOCK (OI#825)

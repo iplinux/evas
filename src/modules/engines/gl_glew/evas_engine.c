@@ -20,6 +20,7 @@ eng_info(Evas *e __UNUSED__)
    info = calloc(1, sizeof(Evas_Engine_Info_GL_Glew));
    if (!info) return NULL;
    info->magic.magic = rand();
+   info->render_mode = EVAS_RENDER_MODE_BLOCKING;
    return info;
 }
 
@@ -259,6 +260,17 @@ eng_output_idle_flush(void *data __UNUSED__)
 }
 
 static void
+eng_output_dump(void *data __UNUSED__)
+{
+   Render_Engine *re;
+
+   re = (Render_Engine *)data;
+   evas_common_image_image_all_unload();
+   evas_common_font_font_all_unload();
+   evas_gl_common_image_all_unload(re->window->gl_context);
+}
+
+static void
 eng_context_cutout_add(void *data __UNUSED__, void *context, int x, int y, int w, int h)
 {
    evas_common_draw_context_add_cutout(context, x, y, w, h);
@@ -314,13 +326,13 @@ eng_polygon_points_clear(void *data, void *context, void *polygon)
 }
 
 static void
-eng_polygon_draw(void *data, void *context, void *surface, void *polygon)
+eng_polygon_draw(void *data, void *context, void *surface, void *polygon, int x, int y)
 {
    Render_Engine *re;
 
    re = (Render_Engine *)data;
    re->window->gl_context->dc = context;
-//--//      evas_gl_common_poly_draw(re->win->gl_context, polygon);
+//--//   evas_gl_common_poly_draw(re->window->gl_context, polygon, x, y);
 }
 
 static void
@@ -708,9 +720,9 @@ eng_image_load(void *data, const char *file, const char *key, int *error, Evas_I
    Render_Engine *re;
 
    re = (Render_Engine *)data;
-   *error = 0;
+   *error = EVAS_LOAD_ERROR_NONE;
    eng_window_use(re->window);
-   return evas_gl_common_image_load(re->window->gl_context, file, key, lo);
+   return evas_gl_common_image_load(re->window->gl_context, file, key, lo, error);
 }
 
 static void *
@@ -1042,6 +1054,7 @@ module_open(Evas_Module *em)
    ORD(context_cutout_clear);
    ORD(output_flush);
    ORD(output_idle_flush);
+   ORD(output_dump);
    ORD(rectangle_draw);
    ORD(line_draw);
    ORD(polygon_point_add);

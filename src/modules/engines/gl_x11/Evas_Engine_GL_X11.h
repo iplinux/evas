@@ -13,19 +13,35 @@ struct _Evas_Engine_Info_GL_X11
 
    /* engine specific data & parameters it needs to set up */
    struct {
-      Display  *display;
-      Drawable  drawable;
-      Visual   *visual;
-      Colormap  colormap;
-      int       depth;
+      Display     *display;
+      Drawable     drawable;
+      Visual      *visual;
+      Colormap     colormap;
+      int          depth;
+      int          screen;
+      int          rotation;
+      unsigned int destination_alpha  : 1;
    } info;
    /* engine specific function calls to query stuff about the destination */
    /* engine (what visual & colormap & depth to use, performance info etc. */
    struct {
-      Visual *  (*best_visual_get)   (Display *disp, int screen);
-      Colormap  (*best_colormap_get) (Display *disp, int screen);
-      int       (*best_depth_get)    (Display *disp, int screen);
+      Visual *  (*best_visual_get)   (Evas_Engine_Info_GL_X11 *einfo);
+      Colormap  (*best_colormap_get) (Evas_Engine_Info_GL_X11 *einfo);
+      int       (*best_depth_get)    (Evas_Engine_Info_GL_X11 *einfo);
    } func;
+
+   struct {
+      void      (*pre_swap)          (void *data, Evas *e);
+      void      (*post_swap)         (void *data, Evas *e);
+      
+      void       *data; // data for callback calls
+   } callback;
+
+   /* non-blocking or blocking mode */
+   Evas_Engine_Render_Mode render_mode;
+   
+   unsigned char vsync : 1; // does nothing right now
+   unsigned char indirect : 1; // use indirect rendering
 };
 #endif
 

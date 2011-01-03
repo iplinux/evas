@@ -23,12 +23,14 @@ evas-cairo-x11.pc \
 evas-directfb.pc \
 evas-fb.pc \
 evas-opengl-x11.pc \
+evas-opengl-sdl.pc \
 evas-opengl-glew.pc \
 evas-quartz.pc \
 evas-software-buffer.pc \
 evas-software-qtopia.pc \
 evas-software-x11.pc \
 evas-software-16-x11.pc \
+evas-software-8-x11.pc \
 evas-xrender-x11.pc \
 evas-xrender-xcb.pc \
 evas-software-gdi.pc \
@@ -62,11 +64,13 @@ evas-cairo-x11.pc.in \
 evas-directfb.pc.in \
 evas-fb.pc.in \
 evas-opengl-x11.pc.in \
+evas-opengl-sdl.pc.in \
 evas-opengl-glew.pc.in \
 evas-software-buffer.pc.in \
 evas-software-qtopia.pc.in \
 evas-software-x11.pc.in \
 evas-software-16-x11.pc.in \
+evas-software-8-x11.pc.in \
 evas-xrender-x11.pc.in \
 evas-xrender-xcb.pc.in \
 evas-software-gdi.pc.in \
@@ -88,6 +92,10 @@ if BUILD_ENGINE_SOFTWARE_16_X11
 pkgconfig_DATA += evas-software-16-x11.pc
 endif
 
+if BUILD_ENGINE_SOFTWARE_8_X11
+pkgconfig_DATA += evas-software-8-x11.pc
+endif
+
 if BUILD_ENGINE_DIRECTFB
 pkgconfig_DATA += evas-directfb.pc
 endif
@@ -106,6 +114,10 @@ endif
 
 if BUILD_ENGINE_GL_X11
 pkgconfig_DATA += evas-opengl-x11.pc
+endif
+
+if BUILD_ENGINE_GL_SDL
+pkgconfig_DATA += evas-opengl-sdl.pc
 endif
 
 if BUILD_ENGINE_QUARTZ

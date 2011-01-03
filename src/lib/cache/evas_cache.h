@@ -19,7 +19,7 @@ struct _Evas_Cache_Image_Func
    DATA32      *(*surface_pixels)(Image_Entry *im);
 
    /* The cache is doing the allocation and deallocation, you must just do the rest. */
-   int          (*constructor)(Image_Entry *im);
+   int          (*constructor)(Image_Entry *im); /**< return is EVAS_LOAD_ERROR_* or EVAS_LOAD_ERROR_NONE! */
    void         (*destructor)(Image_Entry *im);
 
    void         (*dirty_region)(Image_Entry *im, int x, int y, int w, int h);
@@ -37,7 +37,7 @@ struct _Evas_Cache_Image_Func
    int          (*color_space)(Image_Entry *dst, int cspace);
 
    /* This function need to update im->w and im->h. */
-   int          (*load)(Image_Entry *im);
+   int          (*load)(Image_Entry *im); /**< return is EVAS_LOAD_ERROR_* or EVAS_LOAD_ERROR_NONE! */
    int          (*mem_size_get)(Image_Entry *im);
    void         (*debug)(const char *context, Image_Entry *im);
 };
@@ -45,6 +45,9 @@ struct _Evas_Cache_Image_Func
 struct _Evas_Cache_Image
 {
    Evas_Cache_Image_Func         func;
+
+   Eina_List			*preload;
+   Eina_List			*pending;
 
    Eina_Inlist                  *dirty;
 
@@ -57,6 +60,9 @@ struct _Evas_Cache_Image
    int                           usage;
    int                           limit;
    int                           references;
+#ifdef EVAS_FRAME_QUEUING
+   LK(lock);
+#endif
 };
 
 struct _Evas_Cache_Engine_Image_Func
@@ -111,7 +117,6 @@ extern "C" {
 EAPI Evas_Cache_Image*        evas_cache_image_init(const Evas_Cache_Image_Func *cb);
 EAPI void                     evas_cache_image_shutdown(Evas_Cache_Image *cache);
 EAPI Image_Entry*             evas_cache_image_request(Evas_Cache_Image *cache, const char *file, const char *key, RGBA_Image_Loadopts *lo, int *error);
-EAPI void                     evas_cache_pending_process(void);
 EAPI void                     evas_cache_image_drop(Image_Entry *im);
 EAPI void                     evas_cache_image_data_not_needed(Image_Entry *im);
 EAPI int                      evas_cache_image_flush(Evas_Cache_Image *cache);
@@ -126,6 +131,9 @@ EAPI void                     evas_cache_image_set(Evas_Cache_Image *cache, int 
 EAPI Image_Entry*             evas_cache_image_alone(Image_Entry *im);
 EAPI Image_Entry*             evas_cache_image_dirty(Image_Entry *im, int x, int y, int w, int h);
 EAPI void                     evas_cache_image_load_data(Image_Entry *im);
+EAPI void                     evas_cache_image_unload_data(Image_Entry *im);
+EAPI Eina_Bool                evas_cache_image_is_loaded(Image_Entry *im);
+EAPI void                     evas_cache_image_unload_all(Evas_Cache_Image *cache);
 EAPI void                     evas_cache_image_surface_alloc(Image_Entry *im, int w, int h);
 EAPI DATA32*                  evas_cache_image_pixels(Image_Entry *im);
 EAPI Image_Entry*             evas_cache_image_copied_data(Evas_Cache_Image *cache, int w, int h, DATA32 *image_data, int alpha, int cspace);
@@ -156,6 +164,8 @@ EAPI void                     evas_cache_engine_image_load_data(Engine_Image_Ent
 
 EAPI void                     evas_cache_image_preload_data(Image_Entry *im, const void *target);
 EAPI void                     evas_cache_image_preload_cancel(Image_Entry *im, const void *target);
+
+EAPI void                     evas_cache_image_wakeup(void);
 
 #ifdef __cplusplus
 }

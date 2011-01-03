@@ -83,7 +83,6 @@ struct _Evas_Object_Table_Accessor
 /**
  * @addtogroup Evas_Object_Table
  * @{
- * @ingroup Evas_Smart_Object_Group
  */
 
 #define EVAS_OBJECT_TABLE_DATA_GET(o, ptr)			\
@@ -138,7 +137,7 @@ _evas_object_table_iterator_free(Evas_Object_Table_Iterator *it)
 static Eina_Bool
 _evas_object_table_accessor_get_at(Evas_Object_Table_Accessor *it, unsigned int index, void **data)
 {
-   Evas_Object_Table_Option *opt;
+   Evas_Object_Table_Option *opt = NULL;
 
    if (!eina_accessor_data_get(it->real_accessor, index, (void **)&opt))
      return EINA_FALSE;
@@ -727,7 +726,7 @@ _evas_object_table_calculate_layout_regular(Evas_Object *o, Evas_Object_Table_Da
    Evas_Object_Table_Option *opt;
    Evas_Object_Table_Cache *c;
    Eina_List *l;
-   Evas_Coord *cols, *rows;
+   Evas_Coord *cols = NULL, *rows = NULL;
    Evas_Coord x, y, w, h;
 
    evas_object_geometry_get(o, &x, &y, &w, &h);
@@ -747,8 +746,8 @@ _evas_object_table_calculate_layout_regular(Evas_Object *o, Evas_Object_Table_Da
 	if (!cols)
 	  {
 	     ERR("Could not allocate temp columns (%d bytes): %s",
-		   size, strerror(errno));
-	     return;
+                 size, strerror(errno));
+             goto end;
 	  }
 	memcpy(cols, c->sizes.h, size);
 	_evas_object_table_sizes_calc_expand
@@ -770,7 +769,7 @@ _evas_object_table_calculate_layout_regular(Evas_Object *o, Evas_Object_Table_Da
 	if (!rows)
 	  {
 	     ERR("could not allocate temp rows (%d bytes): %s",
-		     size, strerror(errno));
+                 size, strerror(errno));
 	     goto end;
 	  }
 	memcpy(rows, c->sizes.v, size);
@@ -783,26 +782,30 @@ _evas_object_table_calculate_layout_regular(Evas_Object *o, Evas_Object_Table_Da
      {
 	Evas_Object *child = opt->obj;
 	Evas_Coord cx, cy, cw, ch;
-
+        
 	cx = x + opt->col * (priv->pad.h);
 	cx += _evas_object_table_sum_sizes(cols, 0, opt->col);
 	cw = _evas_object_table_sum_sizes(cols, opt->col, opt->end_col);
-
+        
 	cy = y + opt->row * (priv->pad.v);
 	cy += _evas_object_table_sum_sizes(rows, 0, opt->row);
 	ch = _evas_object_table_sum_sizes(rows, opt->row, opt->end_row);
-
+        
 	_evas_object_table_calculate_cell(opt, &cx, &cy, &cw, &ch);
-
+        
 	evas_object_move(child, cx, cy);
 	evas_object_resize(child, cw, ch);
      }
 
  end:
    if (cols != c->sizes.h)
-     free(cols);
+     {
+        if (cols) free(cols);
+     }
    if (rows != c->sizes.v)
-     free(rows);
+     {
+        if (rows) free(rows);
+     }
 }
 
 static void
@@ -813,24 +816,15 @@ _evas_object_table_smart_calculate_regular(Evas_Object *o, Evas_Object_Table_Dat
    _evas_object_table_calculate_layout_regular(o, priv);
 }
 
-static Evas_Smart_Class _parent_sc = EVAS_SMART_CLASS_INIT_NULL;
+EVAS_SMART_SUBCLASS_NEW("Evas_Object_Table", _evas_object_table,
+			Evas_Smart_Class, Evas_Smart_Class,
+			evas_object_smart_clipped_class_get, NULL)
 
 static void
 _evas_object_table_smart_add(Evas_Object *o)
 {
-   Evas_Object_Table_Data *priv;
+   EVAS_SMART_DATA_ALLOC(o, Evas_Object_Table_Data)
 
-   priv = evas_object_smart_data_get(o);
-   if (!priv)
-     {
-	priv = calloc(1, sizeof(*priv));
-	if (!priv)
-	  {
-	     ERR("could not allocate object private data.");
-	     return;
-	  }
-	evas_object_smart_data_set(o, priv);
-     }
    priv->pad.h = 0;
    priv->pad.v = 0;
    priv->align.h = 0.5;
@@ -843,7 +837,7 @@ _evas_object_table_smart_add(Evas_Object *o)
    priv->expand_h = 0;
    priv->expand_v = 0;
 
-   _parent_sc.add(o);
+   _evas_object_table_parent_sc->add(o);
 }
 
 static void
@@ -863,9 +857,12 @@ _evas_object_table_smart_del(Evas_Object *o)
      }
 
    if (priv->cache)
-     _evas_object_table_cache_free(priv->cache);
+     {
+        _evas_object_table_cache_free(priv->cache);
+        priv->cache = NULL;
+     }
 
-   _parent_sc.del(o);
+   _evas_object_table_parent_sc->del(o);
 }
 
 static void
@@ -896,37 +893,12 @@ _evas_object_table_smart_calculate(Evas_Object *o)
 }
 
 static void
-_evas_object_table_smart_set(Evas_Smart_Class *sc)
+_evas_object_table_smart_set_user(Evas_Smart_Class *sc)
 {
-   if (!sc)
-     return;
-
-   if (!_parent_sc.name)
-     evas_object_smart_clipped_smart_set(&_parent_sc);
-
    sc->add = _evas_object_table_smart_add;
    sc->del = _evas_object_table_smart_del;
-   sc->move = _parent_sc.move;
    sc->resize = _evas_object_table_smart_resize;
-   sc->show = _parent_sc.show;
-   sc->hide = _parent_sc.hide;
-   sc->color_set = _parent_sc.color_set;
-   sc->clip_set = _parent_sc.clip_set;
-   sc->clip_unset = _parent_sc.clip_unset;
    sc->calculate = _evas_object_table_smart_calculate;
-   sc->member_add = _parent_sc.member_add;
-   sc->member_del = _parent_sc.member_del;
-}
-
-static Evas_Smart *
-_evas_object_table_smart_class_new(void)
-{
-   static Evas_Smart_Class sc = EVAS_SMART_CLASS_INIT_NAME_VERSION("Evas_Object_Table");
-
-   if (!_parent_sc.name)
-     _evas_object_table_smart_set(&sc);
-
-   return evas_smart_class_new(&sc);
 }
 
 /**
@@ -935,17 +907,10 @@ _evas_object_table_smart_class_new(void)
  * It's set to non-homogeneous by default, add children with
  * evas_object_table_pack().
  */
-Evas_Object *
+EAPI Evas_Object *
 evas_object_table_add(Evas *evas)
 {
-   static Evas_Smart *smart = NULL;
-   Evas_Object *o;
-
-   if (!smart)
-     smart = _evas_object_table_smart_class_new();
-
-   o = evas_object_smart_add(evas, smart);
-   return o;
+   return evas_object_smart_add(evas, _evas_object_table_smart_class_new());
 }
 
 /**
@@ -953,7 +918,7 @@ evas_object_table_add(Evas *evas)
  *
  * @see evas_object_table_add()
  */
-Evas_Object *
+EAPI Evas_Object *
 evas_object_table_add_to(Evas_Object *parent)
 {
    Evas *evas;
@@ -1007,7 +972,7 @@ evas_object_table_add_to(Evas_Object *parent)
  * no minimum size is provided at all then the table will fallback to
  * expand mode as well.
  */
-void
+EAPI void
 evas_object_table_homogeneous_set(Evas_Object *o, Evas_Object_Table_Homogeneous_Mode homogeneous)
 {
    EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN(o, priv);
@@ -1023,7 +988,7 @@ evas_object_table_homogeneous_set(Evas_Object *o, Evas_Object_Table_Homogeneous_
  *
  * @see evas_object_table_homogeneous_set()
  */
-Evas_Object_Table_Homogeneous_Mode
+EAPI Evas_Object_Table_Homogeneous_Mode
 evas_object_table_homogeneous_get(const Evas_Object *o)
 {
    EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN_VAL(o, priv, 0);
@@ -1033,7 +998,7 @@ evas_object_table_homogeneous_get(const Evas_Object *o)
 /**
  * Set the alignment of the whole bounding box of contents.
  */
-void
+EAPI void
 evas_object_table_align_set(Evas_Object *o, double horizontal, double vertical)
 {
    EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN(o, priv);
@@ -1047,7 +1012,7 @@ evas_object_table_align_set(Evas_Object *o, double horizontal, double vertical)
 /**
  * Get alignment of the whole bounding box of contents.
  */
-void
+EAPI void
 evas_object_table_align_get(const Evas_Object *o, double *horizontal, double *vertical)
 {
    EVAS_OBJECT_TABLE_DATA_GET(o, priv);
@@ -1066,7 +1031,7 @@ evas_object_table_align_get(const Evas_Object *o, double *horizontal, double *ve
 /**
  * Set padding between cells.
  */
-void
+EAPI void
 evas_object_table_padding_set(Evas_Object *o, Evas_Coord horizontal, Evas_Coord vertical)
 {
    EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN(o, priv);
@@ -1081,7 +1046,7 @@ evas_object_table_padding_set(Evas_Object *o, Evas_Coord horizontal, Evas_Coord 
 /**
  * Get padding between cells.
  */
-void
+EAPI void
 evas_object_table_padding_get(const Evas_Object *o, Evas_Coord *horizontal, Evas_Coord *vertical)
 {
    EVAS_OBJECT_TABLE_DATA_GET(o, priv);
@@ -1109,7 +1074,7 @@ evas_object_table_padding_get(const Evas_Object *o, Evas_Coord *horizontal, Evas
  *
  * @return 1 on success, 0 on failure.
  */
-Eina_Bool
+EAPI Eina_Bool
 evas_object_table_pack(Evas_Object *o, Evas_Object *child, unsigned short col, unsigned short row, unsigned short colspan, unsigned short rowspan)
 {
    Evas_Object_Table_Option *opt;
@@ -1232,7 +1197,7 @@ _evas_object_table_remove_opt(Evas_Object_Table_Data *priv, Evas_Object_Table_Op
  *
  * @return 1 on success, 0 on failure.
  */
-Eina_Bool
+EAPI Eina_Bool
 evas_object_table_unpack(Evas_Object *o, Evas_Object *child)
 {
    Evas_Object_Table_Option *opt;
@@ -1268,7 +1233,7 @@ evas_object_table_unpack(Evas_Object *o, Evas_Object *child)
  * @param o The given table object.
  * @param clear if true, it will delete just removed children.
  */
-void
+EAPI void
 evas_object_table_clear(Evas_Object *o, Eina_Bool clear)
 {
    Evas_Object_Table_Option *opt;
@@ -1298,7 +1263,7 @@ evas_object_table_clear(Evas_Object *o, Eina_Bool clear)
  *       difference for a single cell table is that paddings will be
  *       accounted proportionally.
  */
-void
+EAPI void
 evas_object_table_col_row_size_get(const Evas_Object *o, int *cols, int *rows)
 {
    EVAS_OBJECT_TABLE_DATA_GET(o, priv);
@@ -1319,7 +1284,7 @@ evas_object_table_col_row_size_get(const Evas_Object *o, int *cols, int *rows)
  *
  * @note Do not remove or delete objects while walking the list.
  */
-Eina_Iterator *
+EAPI Eina_Iterator *
 evas_object_table_iterator_new(const Evas_Object *o)
 {
    Evas_Object_Table_Iterator *it;
@@ -1348,7 +1313,7 @@ evas_object_table_iterator_new(const Evas_Object *o)
  *
  * @note Do not remove or delete objects while walking the list.
  */
-Eina_Accessor *
+EAPI Eina_Accessor *
 evas_object_table_accessor_new(const Evas_Object *o)
 {
    Evas_Object_Table_Accessor *it;
@@ -1380,7 +1345,7 @@ evas_object_table_accessor_new(const Evas_Object *o)
  *       It's possible to remove objects from the table when walking this
  *       list, but these removals won't be reflected on it.
  */
-Eina_List *
+EAPI Eina_List *
 evas_object_table_children_get(const Evas_Object *o)
 {
    Eina_List *new_list = NULL, *l;
@@ -1392,4 +1357,23 @@ evas_object_table_children_get(const Evas_Object *o)
       new_list = eina_list_append(new_list, opt->obj);
 
    return new_list;
+}
+
+/**
+ * Get a child from the table using its coordinates
+ *
+ * @note This does not take into account col/row spanning
+ */
+Evas_Object *
+evas_object_table_child_get(const Evas_Object *o, unsigned short col, unsigned short row)
+{
+   Eina_List *l;
+   Evas_Object_Table_Option *opt;
+
+   EVAS_OBJECT_TABLE_DATA_GET_OR_RETURN_VAL(o, priv, NULL);
+
+   EINA_LIST_FOREACH(priv->children, l, opt)
+      if (opt->col == col && opt->row == row)
+         return opt->obj;
+   return NULL;
 }

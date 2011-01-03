@@ -4,10 +4,16 @@
 #include "evas_common.h"
 #include "evas_intl_utils.h"
 
+#include "evas_font_private.h"
+
 #ifdef INTERNATIONAL_SUPPORT
 #include <fribidi/fribidi.h>
 
 #define UTF8_BYTES_PER_CHAR 4
+
+#ifdef BUILD_PTHREAD
+static LK(fribidi_lock);
+#endif
 
 /* FIXME: fribidi_utf8_to_unicode should use char len and not byte len!*/
 char *
@@ -37,10 +43,12 @@ evas_intl_utf8_to_visual(const char *text,
    if (!unicode_in)
      {
 	len = -1;
-	goto error1;
+        goto error1;
      }
 
+   FBDLOCK();
    len = fribidi_utf8_to_unicode(text, byte_len, unicode_in);
+   FBDUNLOCK();
    unicode_in[len] = 0;
 
    unicode_out = (FriBidiChar *)alloca(sizeof(FriBidiChar) * (len + 1));
@@ -87,12 +95,15 @@ evas_intl_utf8_to_visual(const char *text,
    /* fix arabic context */
    evas_intl_arabic_to_context(unicode_in);
 #endif
+   LKL(fribidi_lock);
    if (!fribidi_log2vis(unicode_in, len, direction,
          unicode_out, tmp_L_to_V_list, tmp_V_to_L_list, tmp_level_list))
      {
+        LKU(fribidi_lock);
  	len = -2;
  	goto error5;
      }
+   LKU(fribidi_lock);
 
    text_out = malloc(UTF8_BYTES_PER_CHAR * len + 1);
    if (!text_out)
@@ -102,7 +113,8 @@ evas_intl_utf8_to_visual(const char *text,
      }
 
    fribidi_unicode_to_utf8(unicode_out, len, text_out);
-
+   FBDUNLOCK();
+   
    *ret_len = len;
    return text_out;
 

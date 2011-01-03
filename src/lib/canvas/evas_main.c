@@ -14,6 +14,7 @@ int _evas_log_dom_global = -1;
  *
  * @see evas_shutdown().
  *
+ * @ingroup Evas_Group
  */
 EAPI int
 evas_init(void)
@@ -21,13 +22,18 @@ evas_init(void)
    if (++_evas_init_count != 1)
      return _evas_init_count;
 
-   if (!eina_init())
+#ifdef HAVE_EVIL
+   if (!evil_init())
      return --_evas_init_count;
+#endif
+
+   if (!eina_init())
+     goto shutdown_evil;
 
    _evas_log_dom_global = eina_log_domain_register("evas_main",EVAS_DEFAULT_LOG_COLOR);
    if (_evas_log_dom_global < 0)
      {
-       EINA_LOG_ERR("Evas could not create a default log domain\n");
+	EINA_LOG_ERR("Evas could not create a default log domain\n");
 	goto shutdown_eina;
      }
 
@@ -39,6 +45,12 @@ evas_init(void)
 #ifdef EVAS_CSERVE
    if (getenv("EVAS_CSERVE")) evas_cserve_init();
 #endif
+#ifdef BUILD_ASYNC_PRELOAD
+   _evas_preload_thread_init();
+#endif
+#ifdef EVAS_FRAME_QUEUING
+   evas_common_frameq_init();
+#endif
 
    return _evas_init_count;
 
@@ -49,6 +61,10 @@ evas_init(void)
 #endif
  shutdown_eina:
    eina_shutdown();
+ shutdown_evil:
+#ifdef HAVE_EVIL
+   evil_shutdown();
+#endif
 
    return --_evas_init_count;
 }
@@ -63,14 +79,24 @@ evas_init(void)
  *
  * @see evas_init().
  *
+ * @ingroup Evas_Group
  */
-
 EAPI int
 evas_shutdown(void)
 {
    if (--_evas_init_count != 0)
      return _evas_init_count;
 
+#ifdef EVAS_FRAME_QUEUING
+   if (evas_common_frameq_enabled())
+     {
+        evas_common_frameq_finish();
+        evas_common_frameq_destroy();
+     }
+#endif
+#ifdef BUILD_ASYNC_EVENTS
+   _evas_preload_thread_shutdown();
+#endif
 #ifdef EVAS_CSERVE
    if (getenv("EVAS_CSERVE")) evas_cserve_shutdown();
 #endif
@@ -82,18 +108,13 @@ evas_shutdown(void)
    evas_module_shutdown();
    eina_log_domain_unregister(_evas_log_dom_global);
    eina_shutdown();
+#ifdef HAVE_EVIL
+   evil_shutdown();
+#endif
 
    return _evas_init_count;
 }
 
-/**
- * @defgroup Evas_Canvas Evas Canvas functions
- *
- * Functions that deal with the basic evas object.  They are the
- * functions you need to use at a minimum to get a working evas, and
- * to destroy it.
- *
- */
 
 /**
  * Creates a new empty evas.
@@ -105,7 +126,15 @@ evas_shutdown(void)
  * @li Ensure that the render engine is given the correct settings
  *     with @ref evas_engine_info_set .
  *
- * This function should only fail if the memory allocation fails.
+ * This function should only fail if the memory allocation fails
+ *
+ * @note this function is very low level. Instead of using it
+ *       directly, consider using the high level functions in
+ *       Ecore_Evas such as @c ecore_evas_new(). See
+ *       http://docs.enlightenment.org/auto/ecore/.
+ *
+ * @attention it is recommended that one calls evas_init() before
+ *       creating new canvas.
  *
  * @return A new uninitialised Evas canvas on success.  Otherwise, @c
  * NULL.
@@ -146,6 +175,7 @@ evas_new(void)
  * in this function.
  *
  * @param   e The given evas.
+ *
  * @ingroup Evas_Canvas
  */
 EAPI void
@@ -160,9 +190,26 @@ evas_free(Evas *e)
    return;
    MAGIC_CHECK_END();
 
-   if (e->walking_list == 0) evas_render_idle_flush(e);
+#ifdef EVAS_FRAME_QUEUING
+   evas_common_frameq_flush();
+#endif
 
+   if (e->walking_list == 0) evas_render_idle_flush(e);
+   
    if (e->walking_list > 0) return;
+   if (!e->callbacks) return;
+   if (e->callbacks->deletions_waiting) return;
+   
+   e->callbacks->deletions_waiting = 0;
+   evas_event_callback_list_post_free(&e->callbacks->callbacks);
+   if (!e->callbacks->callbacks)
+     {
+        free(e->callbacks);
+	e->callbacks = NULL;
+     }
+   
+   _evas_post_event_callback_free(e);
+   
    del = 1;
    e->walking_list++;
    e->cleanup = 1;
@@ -207,6 +254,9 @@ evas_free(Evas *e)
      eina_rectangle_free(r);
 
    evas_fonts_zero_free(e);
+   
+   evas_event_callback_all_del(e);
+   evas_event_callback_cleanup(e);
 
    if (e->engine.func)
      {
@@ -240,39 +290,14 @@ evas_free(Evas *e)
 }
 
 /**
- * @defgroup Evas_Output_Method Evas Render Engine Functions
- *
- * Functions that are used to set the render engine for a given
- * function, and then get that engine working.
- *
- * The following code snippet shows how they can be used to
- * initialise an evas that uses the X11 software engine:
- * @code
- * Evas *evas;
- * Evas_Engine_Info_Software_X11 *einfo;
- * extern Display *display;
- * extern Window win;
- *
- * evas = evas_new();
- * evas_output_method_set(evas, evas_render_method_lookup("software_x11"));
- * evas_output_size_set(evas, 640, 480);
- * evas_output_viewport_set(evas, 0, 0, 640, 480);
- * einfo = (Evas_Engine_Info_Software_X11 *)evas_engine_info_get(evas);
- * einfo->info.display = display;
- * einfo->info.visual = DefaultVisual(display, DefaultScreen(display));
- * einfo->info.colormap = DefaultColormap(display, DefaultScreen(display));
- * einfo->info.drawable = win;
- * einfo->info.depth = DefaultDepth(display, DefaultScreen(display));
- * evas_engine_info_set(evas, (Evas_Engine_Info *)einfo);
- * @endcode
- */
-
-/**
  * Sets the output engine for the given evas.
  *
  * Once the output engine for an evas is set, any attempt to change it
  * will be ignored.  The value for @p render_method can be found using
  * @ref evas_render_method_lookup .
+ *
+ * @attention it is mandatory that one calls evas_init() before
+ *       setting the output method.
  *
  * @param   e             The given evas.
  * @param   render_method The numeric engine value to use.
@@ -371,8 +396,6 @@ evas_engine_info_get(const Evas *e)
  *
  * Once called, the @p info pointer should be considered invalid.
  *
- * Example:
- *
  * @param   e    The pointer to the Evas Canvas
  * @param   info The pointer to the Engine Info to use
  * @return  1 if no error occured, 0 otherwise
@@ -389,14 +412,6 @@ evas_engine_info_set(Evas *e, Evas_Engine_Info *info)
    if (info->magic != e->engine.info_magic) return 0;
    return e->engine.func->setup(e, info);
 }
-
-/**
- * @defgroup Evas_Output_Size Evas Output and Viewport Resizing
- * Functions
- *
- * Functions that set and retrieve the output and viewport size of an
- * evas.
- */
 
 /**
  * Sets the output size of the render engine of the given evas.
@@ -423,6 +438,11 @@ evas_output_size_set(Evas *e, int w, int h)
    if ((w == e->output.w) && (h == e->output.h)) return;
    if (w < 1) w = 1;
    if (h < 1) h = 1;
+
+#ifdef EVAS_FRAME_QUEUING
+   evas_common_frameq_flush();
+#endif
+
    e->output.w = w;
    e->output.h = h;
    e->output.changed = 1;
@@ -542,14 +562,6 @@ evas_output_viewport_get(const Evas *e, Evas_Coord *x, Evas_Coord *y, Evas_Coord
    if (w) *w = e->viewport.w;
    if (h) *h = e->viewport.h;
 }
-
-/**
- * @defgroup Evas_Coord_Mapping_Group Evas Coordinate Mapping
- * Functions
- *
- * Functions that are used to map coordinates from the canvas to the
- * screen or the screen to the canvas.
- */
 
 /**
  * Convert/scale an ouput screen co-ordinate into canvas co-ordinates
@@ -698,10 +710,15 @@ evas_coord_world_y_to_screen(const Evas *e, Evas_Coord y)
  * written accessing render method ID's directly, without first
  * obtaining it from this function.
  *
+ * @attention it is mandatory that one calls evas_init() before
+ *       looking up the render method.
+ *
  * Example:
  * @code
  * int engine_id;
  * Evas *evas;
+ *
+ * evas_init();
  *
  * evas = evas_new();
  * if (!evas)
@@ -861,12 +878,6 @@ evas_render_method_list_free(Eina_List *list)
 }
 
 /**
- * @defgroup Evas_Pointer_Group Evas Pointer Functions
- *
- * Functions that deal with the status of the pointer.
- */
-
-/**
  * This function returns the current known pointer co-ordinates
  *
  * @param e The pointer to the Evas Canvas
@@ -1022,6 +1033,7 @@ evas_pointer_inside_get(const Evas *e)
  *
  * @param e The canvas to attach the pointer to
  * @param data The pointer to attach
+ * @ingroup Evas_Canvas
  */
 EAPI void
 evas_data_attach_set(Evas *e, void *data)
@@ -1037,6 +1049,7 @@ evas_data_attach_set(Evas *e, void *data)
  *
  * @param e The canvas to attach the pointer to
  * @return The pointer attached
+ * @ingroup Evas_Canvas
  */
 EAPI void *
 evas_data_attach_get(const Evas *e)
@@ -1045,6 +1058,55 @@ evas_data_attach_get(const Evas *e)
    return NULL;
    MAGIC_CHECK_END();
    return e->attach_data;
+}
+
+/**
+ * Inform to the evas that it got the focus.
+ *
+ * @param e The evas to change information.
+ * @ingroup Evas_Canvas
+ */
+EAPI void
+evas_focus_in(Evas *e)
+{
+   MAGIC_CHECK(e, Evas, MAGIC_EVAS);
+   return;
+   MAGIC_CHECK_END();
+   if (e->focus) return;
+   e->focus = 1;
+   evas_event_callback_call(e, EVAS_CALLBACK_CANVAS_FOCUS_IN, NULL);
+}
+
+/**
+ * Inform to the evas that it lost the focus.
+ *
+ * @param e The evas to change information.
+ * @ingroup Evas_Canvas
+ */
+EAPI void
+evas_focus_out(Evas *e)
+{
+   MAGIC_CHECK(e, Evas, MAGIC_EVAS);
+   return;
+   MAGIC_CHECK_END();
+   if (!e->focus) return;
+   e->focus = 0;
+   evas_event_callback_call(e, EVAS_CALLBACK_CANVAS_FOCUS_OUT, NULL);
+}
+
+/**
+ * Get the focus state known by the given evas
+ *
+ * @param e The evas to query information.
+ * @ingroup Evas_Canvas
+ */
+EAPI Eina_Bool
+evas_focus_state_get(const Evas *e)
+{
+   MAGIC_CHECK(e, Evas, MAGIC_EVAS);
+   return 0;
+   MAGIC_CHECK_END();
+   return e->focus;
 }
 
 void
@@ -1058,4 +1120,35 @@ _evas_unwalk(Evas *e)
 {
    e->walking_list--;
    if ((e->walking_list == 0) && (e->delete_me)) evas_free(e);
+}
+
+/**
+ * Converts the given error code into a string describing it in english.
+ * @param error the error code.
+ * @return Always return a valid string. If given @p error is not
+ *         supported "Unknown error" is returned.
+ * @ingroup Evas_Utils
+ */
+EAPI const char *
+evas_load_error_str(int error)
+{
+   switch (error)
+     {
+      case EVAS_LOAD_ERROR_NONE:
+	 return "No error on load";
+      case EVAS_LOAD_ERROR_GENERIC:
+	 return "A non-specific error occured";
+      case EVAS_LOAD_ERROR_DOES_NOT_EXIST:
+	 return "File (or file path) does not exist";
+      case EVAS_LOAD_ERROR_PERMISSION_DENIED:
+	 return "Permission deinied to an existing file (or path)";
+      case EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED:
+	 return "Allocation of resources failure prevented load";
+      case EVAS_LOAD_ERROR_CORRUPT_FILE:
+	 return "File corrupt (but was detected as a known format)";
+      case EVAS_LOAD_ERROR_UNKNOWN_FORMAT:
+	 return "File is not a known format";
+      default:
+	 return "Unknown error";
+     }
 }

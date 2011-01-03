@@ -9,6 +9,7 @@
 #include <X11/Xatom.h>
 #include <X11/extensions/XShm.h>
 #include <X11/extensions/Xrender.h>
+#include <X11/Xresource.h> // xres - dpi
 
 #ifdef BUILD_ENGINE_XRENDER_XCB
 # include <xcb/xcb.h>
@@ -149,7 +150,7 @@ void             _xr_xlib_render_surface_composite(Xrender_Surface *srs, Xrender
 void             _xr_xlib_render_surface_copy(Xrender_Surface *srs, Xrender_Surface *drs, int sx, int sy, int x, int y, int w, int h);
 void             _xr_xlib_render_surface_rectangle_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, int x, int y, int w, int h);
 void             _xr_xlib_render_surface_line_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, int x1, int y1, int x2, int y2);
-void             _xr_xlib_render_surface_polygon_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, RGBA_Polygon_Point *points);
+void             _xr_xlib_render_surface_polygon_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, RGBA_Polygon_Point *points, int x, int y);
 
 #ifdef BUILD_ENGINE_XRENDER_XCB
 Xrender_Surface *_xr_xcb_render_surface_new(Ximage_Info *xinf, int w, int h, xcb_render_pictforminfo_t *fmt, int alpha);
@@ -165,7 +166,7 @@ void             _xr_xcb_render_surface_composite(Xrender_Surface *srs, Xrender_
 void             _xr_xcb_render_surface_copy(Xrender_Surface *srs, Xrender_Surface *drs, int sx, int sy, int x, int y, int w, int h);
 void             _xr_xcb_render_surface_rectangle_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, int x, int y, int w, int h);
 void             _xr_xcb_render_surface_line_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, int x1, int y1, int x2, int y2);
-void             _xr_xcb_render_surface_polygon_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, RGBA_Polygon_Point *points);
+void             _xr_xcb_render_surface_polygon_draw(Xrender_Surface *rs, RGBA_Draw_Context *dc, RGBA_Polygon_Point *points, int x, int y);
 #endif
 
 
@@ -186,6 +187,7 @@ struct _XR_Image
    const char      *comment;
    Tilebuf         *updates;
    RGBA_Image_Loadopts load_opts;
+   int              *load_error; /* points to Evas_Object's load_error field */
    struct {
       int           space;
       void         *data;
@@ -196,7 +198,7 @@ struct _XR_Image
    unsigned char    free_data : 1;
 };
 
-XR_Image *_xre_xlib_image_load(Ximage_Info *xinf, const char *file, const char *key, Evas_Image_Load_Opts *lo);
+XR_Image *_xre_xlib_image_load(Ximage_Info *xinf, const char *file, const char *key, Evas_Image_Load_Opts *lo, int *error);
 XR_Image *_xre_xlib_image_new_from_data(Ximage_Info *xinf, int w, int h, void *data, int alpha, int cspace);
 XR_Image *_xre_xlib_image_new_from_copied_data(Ximage_Info *xinf, int w, int h, void *data, int alpha, int cspace);
 XR_Image *_xre_xlib_image_new(Ximage_Info *xinf, int w, int h);
@@ -217,7 +219,7 @@ void      _xre_xlib_image_cache_set(int size);
 int       _xre_xlib_image_cache_get(void);
 
 #ifdef BUILD_ENGINE_XRENDER_XCB
-XR_Image *_xre_xcb_image_load(Ximage_Info *xinf, const char *file, const char *key, Evas_Image_Load_Opts *lo);
+XR_Image *_xre_xcb_image_load(Ximage_Info *xinf, const char *file, const char *key, Evas_Image_Load_Opts *lo, int *error);
 XR_Image *_xre_xcb_image_new_from_data(Ximage_Info *xinf, int w, int h, void *data, int alpha, int cspace);
 XR_Image *_xre_xcb_image_new_from_copied_data(Ximage_Info *xinf, int w, int h, void *data, int alpha, int cspace);
 XR_Image *_xre_xcb_image_new(Ximage_Info *xinf, int w, int h);

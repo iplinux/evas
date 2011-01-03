@@ -8,6 +8,10 @@
 /* public calls */
 
 /**
+ * @addtogroup Evas_Object_Group_Basic
+ * @{
+ */
+/**
  * Sets focus to the given object.
  *
  * @param obj The object to be focused or unfocused.
@@ -31,9 +35,11 @@ evas_object_focus_set(Evas_Object *obj, Eina_Bool focus)
    return;
    MAGIC_CHECK_END();
 
+   _evas_object_event_new();
+
    if (focus)
      {
-	if (obj->focused) return;
+	if (obj->focused) goto end;
 	if (obj->layer->evas->focused)
 	  evas_object_focus_set(obj->layer->evas->focused, 0);
 	obj->focused = 1;
@@ -42,11 +48,13 @@ evas_object_focus_set(Evas_Object *obj, Eina_Bool focus)
      }
    else
      {
-	if (!obj->focused) return;
+	if (!obj->focused) goto end;
 	obj->focused = 0;
 	obj->layer->evas->focused = NULL;
 	evas_object_event_callback_call(obj, EVAS_CALLBACK_FOCUS_OUT, NULL);
      }
+   end:
+   _evas_post_event_callback_call(obj->layer->evas);
 }
 
 /**
@@ -74,6 +82,10 @@ evas_object_focus_get(const Evas_Object *obj)
 }
 
 /**
+ * @}
+ */
+
+/**
  * Retrieve the object that currently has focus.
  *
  * @param e The @c Evas canvas to query focus on.
@@ -86,6 +98,8 @@ evas_object_focus_get(const Evas_Object *obj)
  * @see evas_object_key_ungrab
  *
  * @return The object that has focus or NULL is there is not one.
+ *
+ * @ingroup Evas_Object_Group_Find
  */
 EAPI Evas_Object *
 evas_focus_get(const Evas *e)

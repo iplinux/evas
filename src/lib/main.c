@@ -1,6 +1,9 @@
 #include "evas_common.h"
 #include "evas_private.h"
 
+static Evas_Version _version = { VMAJ, VMIN, VMIC, VREV };
+EAPI Evas_Version *evas_version = &_version;
+
 int _evas_alloc_error = 0;
 static int _evas_debug_init = 0;
 static int _evas_debug_show = 0;
@@ -54,6 +57,8 @@ static int _evas_debug_abort = 0;
  *     my_memory_cleanup();
  *   }
  * @endcode
+ *
+ * @ingroup Evas_Group
  */
 EAPI int
 evas_alloc_error(void)
@@ -101,7 +106,7 @@ evas_debug_error(void)
 	_evas_debug_init = 1;
      }
    if (_evas_debug_show)
-     DBG("*** EVAS ERROR: Evas Magic Check Failed!!!");
+     CRIT("Evas Magic Check Failed!!!");
 }
 
 void
@@ -114,7 +119,7 @@ evas_debug_input_null(void)
 	_evas_debug_init = 1;
      }
    if (_evas_debug_show)
-     DBG("Input object pointer is NULL!");
+     CRIT("Input object pointer is NULL!");
    if (_evas_debug_abort) abort();
 }
 
@@ -128,7 +133,7 @@ evas_debug_magic_null(void)
 	_evas_debug_init = 1;
      }
    if (_evas_debug_show)
-     DBG("Input object is zero'ed out (maybe a freed object or zero-filled RAM)!");
+     CRIT("Input object is zero'ed out (maybe a freed object or zero-filled RAM)!");
    if (_evas_debug_abort) abort();
 }
 
@@ -142,11 +147,11 @@ evas_debug_magic_wrong(DATA32 expected, DATA32 supplied)
 	_evas_debug_init = 1;
      }
    if (_evas_debug_show)
-     DBG("  Input object is wrong type\n"
-	   "    Expected: %08x - %s\n"
-	   "    Supplied: %08x - %s",
-	   expected, evas_debug_magic_string_get(expected),
-	   supplied, evas_debug_magic_string_get(supplied));
+     CRIT("Input object is wrong type\n"
+	  "    Expected: %08x - %s\n"
+	  "    Supplied: %08x - %s",
+	  expected, evas_debug_magic_string_get(expected),
+	  supplied, evas_debug_magic_string_get(supplied));
    if (_evas_debug_abort) abort();
 }
 
@@ -160,8 +165,7 @@ evas_debug_generic(const char *str)
 	_evas_debug_init = 1;
      }
    if (_evas_debug_show)
-     DBG("*** EVAS ERROR:\n"
-	   "%s", (char *)str);
+     CRIT("%s", str);
    if (_evas_debug_abort) abort();
 }
 

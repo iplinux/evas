@@ -1,13 +1,27 @@
 #include "evas_gl_private.h"
 
+void
+evas_gl_common_image_all_unload(Evas_GL_Context *gc)
+{
+   Eina_List *l;
+   Evas_GL_Image *im;
+   
+   EINA_LIST_FOREACH(gc->shared->images, l, im)
+     {
+        if (im->im) evas_cache_image_unload_data(&im->im->cache_entry);
+        if (im->tex) evas_gl_common_texture_free(im->tex);
+        im->tex = NULL;
+     }
+}
+
 Evas_GL_Image *
-evas_gl_common_image_load(Evas_GL_Context *gc, const char *file, const char *key, Evas_Image_Load_Opts *lo)
+evas_gl_common_image_load(Evas_GL_Context *gc, const char *file, const char *key, Evas_Image_Load_Opts *lo, int *error)
 {
    Evas_GL_Image        *im;
    RGBA_Image           *im_im;
    Eina_List            *l;
 
-   im_im = evas_common_load_image_from_file(file, key, lo);
+   im_im = evas_common_load_image_from_file(file, key, lo, error);
    if (!im_im) return NULL;
 
    EINA_LIST_FOREACH(gc->shared->images, l, im)
@@ -18,12 +32,17 @@ evas_gl_common_image_load(Evas_GL_Context *gc, const char *file, const char *key
 	     gc->shared->images = eina_list_remove_list(gc->shared->images, l);
 	     gc->shared->images = eina_list_prepend(gc->shared->images, im);
 	     im->references++;
+	     *error = EVAS_LOAD_ERROR_NONE;
 	     return im;
 	  }
      }
 
    im = calloc(1, sizeof(Evas_GL_Image));
-   if (!im) return NULL;
+   if (!im)
+     {
+	*error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+	return NULL;
+     }
    im->references = 1;
    im->im = im_im;
    im->gc = gc;
@@ -86,10 +105,6 @@ evas_gl_common_image_new_from_data(Evas_GL_Context *gc, int w, int h, DATA32 *da
 	abort();
 	break;
      }
-   /*
-    im->cached = 1;
-    gc->shared->images = eina_list_prepend(gc->shared->images, im);
-    */
    return im;
 }
 
@@ -122,7 +137,8 @@ evas_gl_common_image_new_from_copied_data(Evas_GL_Context *gc, int w, int h, DAT
         if (im->tex) evas_gl_common_texture_free(im->tex);
         im->tex = NULL;
 	im->cs.no_free = 0;
-        im->cs.data = calloc(1, im->im->cache_entry.h * sizeof(unsigned char *) * 2);
+        if (im->im->cache_entry.h > 0)
+          im->cs.data = calloc(1, im->im->cache_entry.h * sizeof(unsigned char *) * 2);
         if ((data) && (im->cs.data))
 	  memcpy(im->cs.data, data, im->im->cache_entry.h * sizeof(unsigned char *) * 2);
 	break;
@@ -141,7 +157,7 @@ evas_gl_common_image_new(Evas_GL_Context *gc, int w, int h, int alpha, int cspac
    im = calloc(1, sizeof(Evas_GL_Image));
    if (!im) return NULL;
    im->references = 1;
-   im->im = (RGBA_Image *) evas_cache_image_empty(evas_common_image_cache_get());
+   im->im = (RGBA_Image *)evas_cache_image_empty(evas_common_image_cache_get());
    if (!im->im)
      {
 	free(im);
@@ -151,10 +167,12 @@ evas_gl_common_image_new(Evas_GL_Context *gc, int w, int h, int alpha, int cspac
    im->im->cache_entry.flags.alpha = alpha ? 1 : 0;
    im->cs.space = cspace;
    im->alpha = im->im->cache_entry.flags.alpha;
+   im->im->cache_entry.w = w;
+   im->im->cache_entry.h = h;
    im->w = im->im->cache_entry.w;
    im->h = im->im->cache_entry.h;
    evas_cache_image_colorspace(&im->im->cache_entry, cspace);
-   im->im = (RGBA_Image *) evas_cache_image_size_set(&im->im->cache_entry, w, h);
+   im->im = (RGBA_Image *)evas_cache_image_size_set(&im->im->cache_entry, w, h);
    switch (cspace)
      {
       case EVAS_COLORSPACE_ARGB8888:
@@ -164,7 +182,8 @@ evas_gl_common_image_new(Evas_GL_Context *gc, int w, int h, int alpha, int cspac
 //        if (im->tex) evas_gl_common_texture_free(im->tex);
 	im->tex = NULL;
 	im->cs.no_free = 0;
-        im->cs.data = calloc(1, im->im->cache_entry.h * sizeof(unsigned char *) * 2);
+        if (im->im->cache_entry.h > 0)
+          im->cs.data = calloc(1, im->im->cache_entry.h * sizeof(unsigned char *) * 2);
 	break;
       default:
 	abort();
@@ -173,12 +192,87 @@ evas_gl_common_image_new(Evas_GL_Context *gc, int w, int h, int alpha, int cspac
    return im;
 }
 
+Evas_GL_Image *
+evas_gl_common_image_alpha_set(Evas_GL_Image *im, int alpha)
+{
+   if (!im) return NULL;
+   if (im->alpha == alpha) return im;
+   im->alpha = alpha;
+   if (!im->im) return im;
+   im->im->cache_entry.flags.alpha = alpha ? 1 : 0;
+   if (im->tex)
+     {
+        evas_gl_common_texture_free(im->tex);
+        im->tex = NULL;
+     }
+   if (!im->tex)
+     im->tex = evas_gl_common_texture_new(im->gc, im->im);
+   return im;
+}
+
+void
+evas_gl_common_image_native_enable(Evas_GL_Image *im)
+{
+   if (im->cs.data)
+     {
+	if (!im->cs.no_free) free(im->cs.data);
+        im->cs.data = NULL;
+     }
+   im->cs.no_free = 0;
+   if (im->cached)
+     {
+        im->gc->shared->images = eina_list_remove(im->gc->shared->images, im);
+        im->cached = 0;
+     }
+   if (im->im)
+     {
+        evas_cache_image_drop(&im->im->cache_entry);
+        im->im = NULL;
+     }
+   if (im->tex)
+     {
+        evas_gl_common_texture_free(im->tex);
+        im->tex = NULL;
+     }
+   
+   im->cs.space = EVAS_COLORSPACE_ARGB8888;
+   im->tex = evas_gl_common_texture_native_new(im->gc, im->w, im->h, im->alpha, im);
+   im->tex_only = 1;
+}
+
+void
+evas_gl_common_image_native_disable(Evas_GL_Image *im)
+{
+   if (im->im)
+     {
+        evas_cache_image_drop(&im->im->cache_entry);
+        im->im = NULL;
+     }
+   if (im->tex)
+     {
+        evas_gl_common_texture_free(im->tex);
+        im->tex = NULL;
+     }
+   im->tex_only = 0;
+   
+   im->im = (RGBA_Image *)evas_cache_image_empty(evas_common_image_cache_get());
+   im->im->cache_entry.flags.alpha = im->alpha;
+   im->cs.space = EVAS_COLORSPACE_ARGB8888;
+   evas_cache_image_colorspace(&im->im->cache_entry, im->cs.space);
+   im->im = (RGBA_Image *)evas_cache_image_size_set(&im->im->cache_entry, im->w, im->h);
+   if (!im->tex)
+     im->tex = evas_gl_common_texture_new(im->gc, im->im);
+}
+
 void
 evas_gl_common_image_free(Evas_GL_Image *im)
 {
    im->references--;
    if (im->references > 0) return;
-
+   
+   if (im->native.func.free)
+     im->native.func.free(im->native.func.data, im);
+   
    if (im->cs.data)
      {
 	if (!im->cs.no_free) free(im->cs.data);
@@ -208,11 +302,16 @@ evas_gl_common_image_surface_new(Evas_GL_Context *gc, int w, int h, int alpha)
 }
 
 void
-evas_gl_common_image_dirty(Evas_GL_Image *im)
+evas_gl_common_image_dirty(Evas_GL_Image *im, int x, int y, int w, int h)
 {
+   if ((w == 0) && (h == 0) && (x == 0) && (y == 0))
+     {
+        w = im->w;
+        h = im->h;
+     }
    if (im->im)
      {
-        im->im = (RGBA_Image *) evas_cache_image_dirty(&im->im->cache_entry, 0, 0, im->im->cache_entry.w, im->im->cache_entry.h);
+        im->im = (RGBA_Image *)evas_cache_image_dirty(&im->im->cache_entry, x, y, w, h);
      }
    im->dirty = 1;
 }
@@ -245,14 +344,19 @@ _evas_gl_common_image_update(Evas_GL_Context *gc, Evas_GL_Image *im)
    switch (im->cs.space)
      {
       case EVAS_COLORSPACE_ARGB8888:
-        evas_cache_image_load_data(&im->im->cache_entry);
 	if ((im->tex) && (im->dirty))
-	  {
-	     evas_gl_common_texture_update(im->tex, im->im);
-	     im->dirty = 0;
-	  }
+          {
+             evas_cache_image_load_data(&im->im->cache_entry);
+             evas_gl_common_texture_update(im->tex, im->im);
+             evas_cache_image_unload_data(&im->im->cache_entry);
+          }
 	if (!im->tex)
-	  im->tex = evas_gl_common_texture_new(gc, im->im);
+          {
+             evas_cache_image_load_data(&im->im->cache_entry);
+             im->tex = evas_gl_common_texture_new(gc, im->im);
+             evas_cache_image_unload_data(&im->im->cache_entry);
+          }
+        im->dirty = 0;
         if (!im->tex) return;
 	break;
       case EVAS_COLORSPACE_YCBCR422P601_PL:
@@ -302,13 +406,10 @@ evas_gl_common_image_map4_draw(Evas_GL_Context *gc, Evas_GL_Image *im,
    
    _evas_gl_common_image_update(gc, im);
 
-   // FIXME: need to handle clipping with a scissor. only sane way to do it.
-
-   glFlush();
-   
    c = gc->dc->clip.use; 
    cx = gc->dc->clip.x; cy = gc->dc->clip.y; 
    cw = gc->dc->clip.w; ch = gc->dc->clip.h;
+   im->tex->im = im;
    evas_gl_common_context_image_map4_push(gc, im->tex, p, 
                                           c, cx, cy, cw, ch, 
                                           r, g, b, a, smooth, im->tex_only);
@@ -342,14 +443,18 @@ evas_gl_common_image_draw(Evas_GL_Context *gc, Evas_GL_Image *im, int sx, int sy
      }
    
    _evas_gl_common_image_update(gc, im);
+   if (!im->tex)
+     {
+        evas_gl_common_rect_draw(gc, dx, dy, dw, dh);
+        return;
+     }
 
    if ((im->cs.space == EVAS_COLORSPACE_YCBCR422P601_PL) ||
        (im->cs.space == EVAS_COLORSPACE_YCBCR422P709_PL))
      yuv = 1;
    
-   if ((!gc->dc->cutout.rects)
-//       || (gc->dc->cutout.active > 32)
-       )
+   im->tex->im = im;
+   if ((!gc->dc->cutout.rects) || (gc->dc->cutout.active > 16))
      {
         if (gc->dc->clip.use)
           {
@@ -375,7 +480,7 @@ evas_gl_common_image_draw(Evas_GL_Context *gc, Evas_GL_Image *im, int sx, int sy
                                                       sx, sy, sw, sh,
                                                       dx, dy, dw, dh,
                                                       r, g, b, a,
-                                                      smooth);
+                                                      smooth, im->tex_only);
                   return;
                }
              
@@ -396,7 +501,7 @@ evas_gl_common_image_draw(Evas_GL_Context *gc, Evas_GL_Image *im, int sx, int sy
                                                  ssx, ssy, ssw, ssh,
                                                  nx, ny, nw, nh,
                                                  r, g, b, a,
-                                                 smooth);
+                                                 smooth, im->tex_only);
           }
         else
           {
@@ -413,7 +518,7 @@ evas_gl_common_image_draw(Evas_GL_Context *gc, Evas_GL_Image *im, int sx, int sy
                                                  sx, sy, sw, sh,
                                                  dx, dy, dw, dh,
                                                  r, g, b, a,
-                                                 smooth);
+                                                 smooth, im->tex_only);
           }
         return;
      }
@@ -452,7 +557,7 @@ evas_gl_common_image_draw(Evas_GL_Context *gc, Evas_GL_Image *im, int sx, int sy
                                                  sx, sy, sw, sh,
                                                  dx, dy, dw, dh,
                                                  r, g, b, a,
-                                                 smooth);
+                                                 smooth, im->tex_only);
              continue;
           }
         ssx = (double)sx + ((double)(sw * (nx - dx)) / (double)(dw));
@@ -472,7 +577,7 @@ evas_gl_common_image_draw(Evas_GL_Context *gc, Evas_GL_Image *im, int sx, int sy
                                             ssx, ssy, ssw, ssh,
                                             nx, ny, nw, nh,
                                             r, g, b, a,
-                                            smooth);
+                                            smooth, im->tex_only);
      }
    evas_common_draw_context_apply_clear_cutouts(rects);
    /* restore clip info */

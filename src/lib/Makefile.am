@@ -67,6 +67,15 @@ SUBDIRS += ../modules/engines/software_16_x11/
 EVAS_STATIC_MODULE += ../modules/engines/software_16_x11/libevas_engine_software_16_x11.la
 EVAS_STATIC_LIBADD += @evas_engine_software_16_x11_libs@
 endif
+if EVAS_STATIC_BUILD_SOFTWARE_8
+SUBDIRS += ../modules/engines/software_8/
+EVAS_STATIC_MODULE += ../modules/engines/software_8/libevas_engine_software_8.la
+endif
+if EVAS_STATIC_BUILD_SOFTWARE_8_X11
+SUBDIRS += ../modules/engines/software_8_x11/
+EVAS_STATIC_MODULE += ../modules/engines/software_8_x11/libevas_engine_software_8_x11.la
+EVAS_STATIC_LIBADD += @evas_engine_software_8_x11_libs@
+endif
 if EVAS_STATIC_BUILD_SOFTWARE_SDL
 SUBDIRS += \
 	../modules/engines/software_16_sdl/ \
@@ -193,7 +202,6 @@ cache/libevas_cache.la \
 imaging/libevas_imaging.la \
 $(libevas_cserve_la) \
 engines/common/libevas_engine_common.la \
-@dlopen_libs@ \
 @FREETYPE_LIBS@ \
 @FRIBIDI_LIBS@ \
 @EET_LIBS@ \
@@ -217,6 +225,13 @@ if BUILD_ENGINE_SOFTWARE_16
 
 libevas_la_LIBADD += engines/common_16/libevas_engine_common_16.la
 libevas_la_DEPENDENCIES += engines/common_16/libevas_engine_common_16.la
+
+endif
+
+if BUILD_ENGINE_SOFTWARE_8
+
+libevas_la_LIBADD += engines/common_8/libevas_engine_common_8.la
+libevas_la_DEPENDENCIES += engines/common_8/libevas_engine_common_8.la
 
 endif
 

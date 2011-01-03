@@ -13,13 +13,7 @@
 #   include <X11/Xatom.h>
 #   include <X11/Xutil.h>
 #   include <X11/extensions/Xrender.h>
-//// this changed. this was the old style. above the new style
-//#   include <EGL/egl.h>
-//#   include <GLES/gl.h>
-//#   include <X11/Xlib.h>
-//#   include <X11/Xatom.h>
-//#   include <X11/Xutil.h>
-//#   include <X11/extensions/Xrender.h>
+# include <X11/Xresource.h> // xres - dpi
 #  elif defined(GLES_VARIETY_SGX)
 #   define SUPPORT_X11 1
 #   include <EGL/egl.h>
@@ -29,13 +23,14 @@
 #   include <X11/Xatom.h>
 #   include <X11/Xutil.h>
 #   include <X11/extensions/Xrender.h>
-#  endif
+#   include <X11/Xresource.h> // xres - dpi
+#endif
 # else
-#  include <GL/glx.h>
 #  include <X11/Xlib.h>
 #  include <X11/Xatom.h>
 #  include <X11/Xutil.h>
 #  include <X11/extensions/Xrender.h>
+#  include <X11/Xresource.h> // xres - dpi
 #  include <GL/gl.h>
 #  include <GL/glext.h>
 #  include <GL/glx.h>
@@ -85,6 +80,8 @@ struct _Evas_GL_X11_Window
    Visual          *visual;
    Colormap         colormap;
    int              depth;
+   int              alpha;
+   int              rot;
    Evas_GL_Context *gl_context;
    struct {
       int              redraw : 1;
@@ -98,17 +95,30 @@ struct _Evas_GL_X11_Window
    EGLDisplay       egl_disp;
 #else   
    GLXContext       context;
+   GLXWindow        glxwin;
+   struct {
+      GLXFBConfig   fbc;
+      int           tex_format;
+      int           tex_target;
+      int           mipmap;
+      unsigned char yinvert : 1;
+   } depth_cfg[33]; // config for all 32 possible depths!
+   
+   struct {
+      unsigned int loose_binding : 1;
+   } detected;
 #endif
 
 };
 
 Evas_GL_X11_Window *eng_window_new(Display *disp, Window win, int screen,
                                    Visual *vis, Colormap cmap,
-                                   int depth, int w, int h);
+                                   int depth, int w, int h, int indirect,
+                                   int alpha, int rot);
 void      eng_window_free(Evas_GL_X11_Window *gw);
 void      eng_window_use(Evas_GL_X11_Window *gw);
-Visual   *eng_best_visual_get(Display *disp, int screen);
-Colormap  eng_best_colormap_get(Display *disp, int screen);
-int       eng_best_depth_get(Display *disp, int screen);
+Visual   *eng_best_visual_get(Evas_Engine_Info_GL_X11 *einfo);
+Colormap  eng_best_colormap_get(Evas_Engine_Info_GL_X11 *einfo);
+int       eng_best_depth_get(Evas_Engine_Info_GL_X11 *einfo);
 
 #endif

@@ -10,10 +10,10 @@ FUNC_NAME(RGBA_Image *src, RGBA_Image *dst,
 {
    int i;
    int c, cx, cy, cw, ch;
-   int ytop, ybottom, ystart, yend, y, sw, sh, shp, swp, direct;
+   int ytop, ybottom, ystart, yend, y, sw, shp, swp, direct;
    Line *spans;
-   DATA32 *buf, *sp;
-   RGBA_Gfx_Func func;
+   DATA32 *buf = NULL, *sp;
+   RGBA_Gfx_Func func = NULL;
    int havea = 0;
    int havecol = 4;
 
@@ -106,7 +106,7 @@ FUNC_NAME(RGBA_Image *src, RGBA_Image *dst,
           func = evas_common_gfx_func_composite_pixel_span_get(src, dst, cw, dc->render_op);
         src->cache_entry.flags.alpha = pa;
      }
-   
+    
    if (!havecol)
      {
 #undef COLMUL     

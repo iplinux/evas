@@ -23,7 +23,9 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 	--disable-software-xlib \
 	--disable-xrender-x11 \
 	--disable-gl-x11 \
-	--enable-software-xcb=static \
+	--disable-software-xcb \
+	--enable-software-8-x11=static \
+	--enable-static-software-8 \
 	--disable-xrender-xcb \
 	--disable-software-sdl \
 	--disable-fb \
@@ -52,35 +54,38 @@ DEB_CONFIGURE_EXTRA_FLAGS := $(arch_flags) --disable-rpath \
 	--disable-small-dither-mask \
 	--disable-line-dither-mask \
 	--enable-no-dither-mask \
-	--enable-convert-8-rgb-332 \
-	--enable-convert-8-rgb-666 \
-	--enable-convert-8-rgb-232 \
-	--enable-convert-8-rgb-222 \
-	--enable-convert-8-rgb-221 \
-	--enable-convert-8-rgb-121 \
-	--enable-convert-8-rgb-111 \
-	--enable-convert-16-rgb-565 \
-	--enable-convert-16-bgr-565 \
-	--enable-convert-16-rgb-555 \
-	--enable-convert-16-rgb-444 \
-	--enable-convert-16-rgb-ipq \
-	--enable-convert-16-rgb-rot-0 \
-	--enable-convert-16-rgb-rot-180 \
-	--enable-convert-16-rgb-rot-270 \
-	--enable-convert-16-rgb-rot-90 \
-	--enable-convert-24-rgb-888 \
-	--enable-convert-24-bgr-888 \
-	--enable-convert-32-rgb-8888 \
-	--enable-convert-32-rgbx-8888 \
-	--enable-convert-32-bgr-8888 \
-	--enable-convert-32-bgrx-8888 \
-	--enable-convert-32-rgb-rot-0 \
-	--enable-convert-32-rgb-rot-180 \
-	--enable-convert-32-rgb-rot-270 \
-	--enable-convert-32-rgb-rot-90 \
-	--enable-convert-8-gry-1 \
-	--enable-convert-8-gry-16 \
-	--enable-convert-8-grayscale-64 \
+	--disable-convert-8-rgb-332 \
+	--disable-convert-8-rgb-666 \
+	--disable-convert-8-rgb-232 \
+	--disable-convert-8-rgb-222 \
+	--disable-convert-8-rgb-221 \
+	--disable-convert-8-rgb-121 \
+	--disable-convert-8-rgb-111 \
+	--disable-convert-16-rgb-565 \
+	--disable-convert-16-bgr-565 \
+	--disable-convert-16-rgb-555 \
+	--disable-convert-16-rgb-444 \
+	--disable-convert-16-rgb-ipq \
+	--disable-convert-16-rgb-rot-0 \
+	--disable-convert-16-rgb-rot-180 \
+	--disable-convert-16-rgb-rot-270 \
+	--disable-convert-16-rgb-rot-90 \
+	--disable-convert-24-rgb-888 \
+	--disable-convert-24-bgr-888 \
+	--disable-convert-24-rgb-ezx \
+	--disable-convert-32-rgb-ezx \
+	--disable-convert-32-rgb-8888 \
+	--disable-convert-32-rgbx-8888 \
+	--disable-convert-32-bgr-8888 \
+	--disable-convert-32-bgrx-8888 \
+	--disable-convert-32-rgb-rot-0 \
+	--disable-convert-32-rgb-rot-180 \
+	--disable-convert-32-rgb-rot-270 \
+	--disable-convert-32-rgb-rot-90 \
+	--disable-convert-8-gry-1 \
+	--disable-convert-8-gry-16 \
+	--disable-convert-8-grayscale-64 \
+	--disable-convert-8-rgb-666 \
 	--host=$(DEB_HOST_GNU_TYPE)
 
 clean::

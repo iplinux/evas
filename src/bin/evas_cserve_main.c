@@ -556,8 +556,18 @@ img_free(Img *img)
    strshr_freeme_count +=  3;
    if (strshr_freeme_count > strshr_freeme_alloc)
      {
+        const char **tmp;
+        
         strshr_freeme_alloc += 32;
-        strshr_freeme = realloc(strshr_freeme, strshr_freeme_alloc * sizeof(const char **));
+        tmp = realloc(strshr_freeme, strshr_freeme_alloc * sizeof(const char **));
+        if (tmp) strshr_freeme = tmp;
+        else
+          {
+             printf("realloc of strshr_freeme failed for %i items\n", strshr_freeme_alloc);
+             strshr_freeme_alloc -= 32;
+             strshr_freeme_count -= 3;
+             return;
+          }
      }
    strshr_freeme[strshr_freeme_count - 3] = img->key;
    strshr_freeme[strshr_freeme_count - 2] = img->file.file;
@@ -944,6 +954,10 @@ load_data_thread(void *data)
 static int
 message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *data)
 {
+   // copy data into  local aligned buffer... in case.
+   unsigned char *tdata = alloca(size + 16);
+   memcpy(tdata, data, size);
+   
    t_now = time(NULL);
    DBG("message @ %i...", (int)t_now);
    switch (opcode)
@@ -957,7 +971,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              msg.pid = getpid();
              msg.server_id = server_id;
              msg.handle = c;
-             rep = (Op_Init *)data;
+             rep = (Op_Init *)tdata;
              c->pid = rep->pid;
              if (rep->server_id == 1) // 2nd channel conn
                {
@@ -979,8 +993,8 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              char *file = NULL, *key = NULL;
              
              DBG("OP_LOAD %i", c->pid);
-             rep = (Op_Load *)data;
-             file = data + sizeof(Op_Load);
+             rep = (Op_Load *)tdata;
+             file = (char*) (data + sizeof(Op_Load));
              key = file + strlen(file) + 1;
              if (key[0] == 0) key = NULL;
              lopt.scale_down_by = rep->lopt.scale_down_by;
@@ -1035,7 +1049,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Img *img;
              
              DBG("OP_UNLOAD %i", c->pid);
-             rep = (Op_Unload *)data;
+             rep = (Op_Unload *)tdata;
              img = rep->handle;
              if ((img) && (rep->server_id == server_id))
                {
@@ -1066,7 +1080,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Img *img;
              
              DBG("OP_LOADDATA %i", c->pid);
-             rep = (Op_Loaddata *)data;
+             rep = (Op_Loaddata *)tdata;
              img = rep->handle;
              if ((img) && (rep->server_id == server_id))
                {
@@ -1139,7 +1153,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Img *img;
              
              DBG("OP_UNLOADDATA %i", c->pid);
-             rep = (Op_Unloaddata *)data;
+             rep = (Op_Unloaddata *)tdata;
              img = rep->handle;
              if ((img) && (rep->server_id == server_id))
                {
@@ -1159,7 +1173,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Img *img;
              
              DBG("OP_USELESSDATA %i", c->pid);
-             rep = (Op_Unloaddata *)data;
+             rep = (Op_Unloaddata *)tdata;
              img = rep->handle;
              if ((img) && (rep->server_id == server_id))
                {
@@ -1179,7 +1193,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Img *img;
              
              DBG("OP_PRELOAD %i", c->pid);
-             rep = (Op_Preload *)data;
+             rep = (Op_Preload *)tdata;
              img = rep->handle;
              if ((img) && (rep->server_id == server_id))
                {
@@ -1199,7 +1213,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Img *img;
              
              DBG("OP_FORCEDUNLOAD %i", c->pid);
-             rep = (Op_Forcedunload *)data;
+             rep = (Op_Forcedunload *)tdata;
              img = rep->handle;
              if ((img) && (rep->server_id == server_id))
                {
@@ -1240,7 +1254,7 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
              Op_Setconfig *rep;
              
              DBG("OP_SETCONFIG %i", c->pid);
-             rep = (Op_Setconfig *)data;
+             rep = (Op_Setconfig *)tdata;
              cache_max_usage = rep->cache_max_usage;
              cache_item_timeout = rep->cache_item_timeout;
              cache_item_timeout_check = rep->cache_item_timeout_check;
@@ -1311,23 +1325,22 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
                   DBG("...   walk all imgs");
                   EINA_LIST_FOREACH(imgs, l, img)
                     {
-                       Op_Getinfo_Item *itt, it;
+                       Op_Getinfo_Item it;
 
                        LKL(img->lock); 
                        DBG("...   img %p", img);
                        memset(&it, 0, sizeof(Op_Getinfo_Item));
-                       itt = (Op_Getinfo_Item *)p;
                        it.file_key_size = 0;
                        if (img->file.file)
                          {
-                            strcpy(p + sizeof(Op_Getinfo_Item) + it.file_key_size, img->file.file);
+			    strcpy((char *)p + sizeof(Op_Getinfo_Item) + it.file_key_size, img->file.file);
                             it.file_key_size += strlen(img->file.file);
                          }
                        p[sizeof(Op_Getinfo_Item) + it.file_key_size] = 0;
                        it.file_key_size += 1;
                        if (img->file.key)
                          {
-                            strcpy(p + sizeof(Op_Getinfo_Item) + it.file_key_size, img->file.key);
+			    strcpy((char *)p + sizeof(Op_Getinfo_Item) + it.file_key_size, img->file.key);
                             it.file_key_size += strlen(img->file.key);
                          }
                        p[sizeof(Op_Getinfo_Item) + it.file_key_size] = 0;
@@ -1364,9 +1377,9 @@ message(void *fdata, Server *s, Client *c, int opcode, int size, unsigned char *
                          }
                        it.dead = img->dead;
                        it.useless = img->useless;
-                       DBG("...   memcpy %p %p %i ", 
-                         itt, &it, sizeof(Op_Getinfo_Item));
-                       memcpy(itt, &it, sizeof(Op_Getinfo_Item));
+                       DBG("...   memcpy %p %p %zu ", 
+                         p, &it, sizeof(Op_Getinfo_Item));
+                       memcpy(p, &it, sizeof(Op_Getinfo_Item));
                        DBG("...   memcpy done %p", img);
                        p += sizeof(Op_Getinfo_Item) + it.file_key_size;
                        LKU(img->lock); 

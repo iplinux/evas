@@ -85,24 +85,8 @@ static const Evas_Object_Func object_func =
 /* the actual api call to add a gradient */
 
 /**
- * @defgroup Evas_Object_Gradient_Group Gradient Object Functions
- *
- * Functions that work on evas gradient objects.
- *
- * The following example shows how
- */
-
-/**
- * @defgroup Evas_Object_Specific Specific Object Functions
- *
- * Functions that work on specific objects.
- *
- */
-
-/**
  * @addtogroup Evas_Object_Gradient_Group
  * @{
- * @ingroup Evas_Object_Specific
  */
 
 /**
@@ -119,7 +103,7 @@ evas_object_gradient_add(Evas *e)
    MAGIC_CHECK(e, Evas, MAGIC_EVAS);
    return NULL;
    MAGIC_CHECK_END();
-   obj = evas_object_new();
+   obj = evas_object_new(e);
    evas_object_gradient_init(obj);
    evas_object_inject(obj, e);
    if (obj->object_data)
@@ -163,9 +147,15 @@ evas_object_gradient_color_stop_add(Evas_Object *obj, int r, int g, int b, int a
    return;
    MAGIC_CHECK_END();
    if (o->engine_data)
-      obj->layer->evas->engine.func->gradient_color_stop_add(obj->layer->evas->engine.data.output,
-							     o->engine_data,
-							     r, g, b, a, delta);
+     {
+#ifdef EVAS_FRAME_QUEUING
+        evas_common_pipe_op_grad_flush(o->engine_data);
+#endif
+
+        obj->layer->evas->engine.func->gradient_color_stop_add(obj->layer->evas->engine.data.output,
+                           o->engine_data,
+                           r, g, b, a, delta);
+     }
    o->gradient_changed = 1;
    o->changed = 1;
    evas_object_change(obj);
@@ -196,8 +186,13 @@ evas_object_gradient_alpha_stop_add(Evas_Object *obj, int a, int delta)
    return;
    MAGIC_CHECK_END();
    if (o->engine_data)
-      obj->layer->evas->engine.func->gradient_alpha_stop_add(obj->layer->evas->engine.data.output,
-							     o->engine_data, a, delta);
+     {
+#ifdef EVAS_FRAME_QUEUING
+        evas_common_pipe_op_grad_flush(o->engine_data);
+#endif
+        obj->layer->evas->engine.func->gradient_alpha_stop_add(obj->layer->evas->engine.data.output,
+                     o->engine_data, a, delta);
+     }
    o->gradient_changed = 1;
    o->changed = 1;
    evas_object_change(obj);
@@ -220,8 +215,13 @@ evas_object_gradient_clear(Evas_Object *obj)
    return;
    MAGIC_CHECK_END();
    if (o->engine_data)
-      obj->layer->evas->engine.func->gradient_clear(obj->layer->evas->engine.data.output,
-						    o->engine_data);
+     {
+#ifdef EVAS_FRAME_QUEUING
+        evas_common_pipe_op_grad_flush(o->engine_data);
+#endif
+        obj->layer->evas->engine.func->gradient_clear(obj->layer->evas->engine.data.output,
+                        o->engine_data);
+     }
    o->gradient_changed = 1;
    o->changed = 1;
    o->cur.gradient_opaque = 0;
@@ -252,9 +252,14 @@ evas_object_gradient_color_data_set(Evas_Object *obj, void *data, int len, Eina_
    return;
    MAGIC_CHECK_END();
    if (o->engine_data)
-	obj->layer->evas->engine.func->gradient_color_data_set(obj->layer->evas->engine.data.output,
-								o->engine_data,
-								data, len, has_alpha);
+     {
+#ifdef EVAS_FRAME_QUEUING
+        evas_common_pipe_op_grad_flush(o->engine_data);
+#endif
+        obj->layer->evas->engine.func->gradient_color_data_set(obj->layer->evas->engine.data.output,
+                        o->engine_data,
+                        data, len, has_alpha);
+     }
    o->gradient_changed = 1;
    o->changed = 1;
    evas_object_change(obj);
@@ -283,9 +288,14 @@ evas_object_gradient_alpha_data_set(Evas_Object *obj, void *data, int len)
    return;
    MAGIC_CHECK_END();
    if (o->engine_data)
-	obj->layer->evas->engine.func->gradient_alpha_data_set(obj->layer->evas->engine.data.output,
-								o->engine_data,
-								data, len);
+     {
+#ifdef EVAS_FRAME_QUEUING
+        evas_common_pipe_op_grad_flush(o->engine_data);
+#endif
+        obj->layer->evas->engine.func->gradient_alpha_data_set(obj->layer->evas->engine.data.output,
+                        o->engine_data,
+                        data, len);
+     }
    o->gradient_changed = 1;
    o->changed = 1;
    evas_object_change(obj);
@@ -724,6 +734,7 @@ evas_object_gradient_type_get(const Evas_Object *obj, char **name, char **params
  * This function converts a given color in HSV color format to RGB
  * color format.
  *
+ * @ingroup Evas_Utils
  **/
 EAPI void
 evas_color_hsv_to_rgb(float h, float s, float v, int *r, int *g, int *b)
@@ -744,6 +755,7 @@ evas_color_hsv_to_rgb(float h, float s, float v, int *r, int *g, int *b)
  * This function converts a given color in RGB color format to HSV
  * color format.
  *
+ * @ingroup Evas_Utils
  **/
 EAPI void
 evas_color_rgb_to_hsv(int r, int g, int b, float *h, float *s, float *v)
@@ -762,6 +774,7 @@ evas_color_rgb_to_hsv(int r, int g, int b, float *h, float *s, float *v)
  * This function pre-multiplies a given rbg triplet by an alpha
  * factor. Alpha factor is used to define transparency.
  *
+ * @ingroup Evas_Utils
  **/
 EAPI void
 evas_color_argb_premul(int a, int *r, int *g, int *b)
@@ -782,6 +795,7 @@ evas_color_argb_premul(int a, int *r, int *g, int *b)
  *
  * @see evas_color_argb_premul().
  *
+ * @ingroup Evas_Utils
  **/
 EAPI void
 evas_color_argb_unpremul(int a, int *r, int *g, int *b)
@@ -798,6 +812,7 @@ evas_color_argb_unpremul(int a, int *r, int *g, int *b)
  * This function pre-multiplies a given data by an alpha
  * factor. Alpha factor is used to define transparency.
  *
+ * @ingroup Evas_Utils
  **/
 EAPI void
 evas_data_argb_premul(unsigned int *data, unsigned int len)
@@ -815,6 +830,7 @@ evas_data_argb_premul(unsigned int *data, unsigned int len)
  * This function undoes pre-multiplication of a given data by an alpha
  * factor. Alpha factor is used to define transparency.
  *
+ * @ingroup Evas_Utils
  **/
 EAPI void
 evas_data_argb_unpremul(unsigned int *data, unsigned int len)

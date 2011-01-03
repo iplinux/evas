@@ -1,6 +1,12 @@
 #ifndef EVAS_INLINE_H
 #define EVAS_INLINE_H
 
+static inline void
+_evas_object_event_new(void)
+{
+   _evas_event_counter++;
+}
+
 static inline int
 evas_object_was_visible(Evas_Object *obj)
 {
@@ -174,7 +180,7 @@ evas_object_clip_recalc(Evas_Object *obj)
      return;
    if (obj->layer->evas->events_frozen > 0) return;
    evas_object_coords_recalc(obj);
-   if (obj->cur.map)
+   if ((obj->cur.map) && (obj->cur.usemap))
      {
         cx = obj->cur.map->normal_geometry.x;
         cy = obj->cur.map->normal_geometry.y;

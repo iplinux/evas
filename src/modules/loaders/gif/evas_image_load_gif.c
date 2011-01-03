@@ -7,17 +7,18 @@
 
 #include <gif_lib.h>
 
-static int evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key);
-static int evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key);
+static Eina_Bool evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key, int *error) EINA_ARG_NONNULL(1, 2, 4);
+static Eina_Bool evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key, int *error) EINA_ARG_NONNULL(1, 2, 4);
 
 static Evas_Image_Load_Func evas_image_load_gif_func =
 {
+  EINA_TRUE,
   evas_image_load_file_head_gif,
   evas_image_load_file_data_gif
 };
 
-static int
-evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key __UNUSED__)
+static Eina_Bool
+evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key __UNUSED__, int *error)
 {
    int                 fd;
    GifFileType        *gif;
@@ -32,21 +33,23 @@ evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key
    h = 0;
    alpha = -1;
 
-   if (!file) return 0;
-
 #ifndef __EMX__
    fd = open(file, O_RDONLY);
 #else
    fd = open(file, O_RDONLY | O_BINARY);
 #endif
    if (fd < 0)
-      return 0;
+     {
+	*error = EVAS_LOAD_ERROR_DOES_NOT_EXIST;
+	return EINA_FALSE;
+     }
 
    gif = DGifOpenFileHandle(fd);
    if (!gif)
      {
         close(fd);
-        return 0;
+	*error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;
      }
 
    do
@@ -69,7 +72,11 @@ evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key
                  IMG_TOO_BIG(w, h))
 	       {
 		  DGifCloseFile(gif);
-		  return 0;
+		  if (IMG_TOO_BIG(w, h))
+		    *error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+		  else
+		    *error = EVAS_LOAD_ERROR_GENERIC;
+		  return EINA_FALSE;
 	       }
 	     done = 1;
           }
@@ -77,7 +84,7 @@ evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key
           {
              int                 ext_code;
              GifByteType        *ext;
-	     
+
              ext = NULL;
              DGifGetExtension(gif, &ext_code, &ext);
              while (ext)
@@ -97,11 +104,12 @@ evas_image_load_file_head_gif(Image_Entry *ie, const char *file, const char *key
    ie->h = h;
 
    DGifCloseFile(gif);
-   return 1;
+   *error = EVAS_LOAD_ERROR_NONE;
+   return EINA_TRUE;
 }
 
-static int
-evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key __UNUSED__)
+static Eina_Bool
+evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key __UNUSED__, int *error)
 {
    int                 intoffset[] = { 0, 4, 2, 1 };
    int                 intjump[] = { 8, 8, 4, 2 };
@@ -135,21 +143,23 @@ evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key
    h = 0;
    alpha = -1;
 
-   if (!file) return 0;
-
 #ifndef __EMX__
    fd = open(file, O_RDONLY);
 #else
    fd = open(file, O_RDONLY | O_BINARY);
 #endif
    if (fd < 0)
-      return 0;
+     {
+	*error = EVAS_LOAD_ERROR_DOES_NOT_EXIST;
+	return EINA_FALSE;
+     }
 
    gif = DGifOpenFileHandle(fd);
    if (!gif)
      {
         close(fd);
-        return 0;
+	*error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;
      }
    do
      {
@@ -191,7 +201,8 @@ evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key
                               }
                          }
                        free(rows);
-                       return 0;
+		       *error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+		       return EINA_FALSE;
                     }
                }
              if (gif->Image.Interlace)
@@ -242,7 +253,8 @@ evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key
             free(rows[i]);
           }
         free(rows);
-	return 0;
+	*error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+	return EINA_FALSE;
      }
 
    bg = gif->SBackGroundColor;
@@ -260,14 +272,14 @@ evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key
                r = cmap->Colors[bg].Red;
                g = cmap->Colors[bg].Green;
                b = cmap->Colors[bg].Blue;
-               *ptr++ = 0x00ffffff & ((r << 16) | (g << 8) | b);
+               *ptr++ = 0x00ffffff & RGB_JOIN(r, g, b);
              }
            else
              {
                r = cmap->Colors[rows[i][j]].Red;
                g = cmap->Colors[rows[i][j]].Green;
                b = cmap->Colors[rows[i][j]].Blue;
-               *ptr++ = (0xff << 24) | (r << 16) | (g << 8) | b;
+               *ptr++ = ARGB_JOIN(0xff, r, g, b);
              }
            per += per_inc;
          }
@@ -280,7 +292,8 @@ evas_image_load_file_data_gif(Image_Entry *ie, const char *file, const char *key
      }
    free(rows);
 
-   return 1;
+   *error = EVAS_LOAD_ERROR_NONE;
+   return EINA_TRUE;
 }
 
 static int

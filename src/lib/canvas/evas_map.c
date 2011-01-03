@@ -37,6 +37,7 @@ _evas_map_calc_map_geometry(Evas_Object *obj)
 {
    Evas_Coord x1, x2, y1, y2;
    const Evas_Map_Point *p, *p_end;
+   int ch;
 
    if (!obj->cur.map) return;
    p = obj->cur.map->points;
@@ -53,11 +54,16 @@ _evas_map_calc_map_geometry(Evas_Object *obj)
         if (p->y < y1) y1 = p->y;
         if (p->y > y2) y2 = p->y;
      }
+   ch = 0;
+   if (obj->cur.map->normal_geometry.x != x1) ch = 1;
+   if (obj->cur.map->normal_geometry.y != y1) ch = 1;
+   if (obj->cur.map->normal_geometry.w != (x2 - x1)) ch = 1;
+   if (obj->cur.map->normal_geometry.h != (y2 - y1)) ch = 1;
    obj->cur.map->normal_geometry.x = x1;
    obj->cur.map->normal_geometry.y = y1;
    obj->cur.map->normal_geometry.w = (x2 - x1);
    obj->cur.map->normal_geometry.h = (y2 - y1);
-   _evas_map_calc_geom_change(obj);
+   if (ch) _evas_map_calc_geom_change(obj);
 }
 
 static inline Evas_Map *
@@ -105,8 +111,14 @@ _evas_map_dup(const Evas_Map *orig)
 }
 
 static inline void
-_evas_map_free(Evas_Map *m)
+_evas_map_free(Evas_Object *obj, Evas_Map *m)
 {
+   if (obj)
+     {
+        if (m->surface)
+          obj->layer->evas->engine.func->image_map_surface_free
+          (obj->layer->evas->engine.data.output, m->surface);
+     }
    free(m);
 }
 
@@ -114,9 +126,10 @@ Eina_Bool
 evas_map_coords_get(const Evas_Map *m, Evas_Coord x, Evas_Coord y,
                     Evas_Coord *mx, Evas_Coord *my, int grab)
 {
-   int order[4], i, j, edges, edge[4][2], douv;
+   int i, j, edges, edge[4][2], douv;
    Evas_Coord xe[2];
-   double u[2], v[2];
+   double u[2] = { 0.0, 0.0 };
+   double v[2] = { 0.0, 0.0 };
 
    if (m->count != 4) return 0;
    // FIXME need to handle grab mode and extrapolte coords outside
@@ -156,8 +169,8 @@ evas_map_coords_get(const Evas_Map *m, Evas_Coord x, Evas_Coord y,
    if ((mx) || (my)) douv = 1;
    for (i = 0; i < (edges - 1); i+= 2)
      {
-        Evas_Coord yp, yd, x0, x1;
-        
+        Evas_Coord yp, yd;
+
         j = i + 1;
         yd = m->points[edge[i][1]].y - m->points[edge[i][0]].y;
         if (yd > 0)
@@ -256,18 +269,18 @@ evas_map_inside_get(const Evas_Map *m, Evas_Coord x, Evas_Coord y)
 
 
 /**
- * Enable or disable the map that is set
+ * Enable or disable the map that is set.
  * 
  * This enables the map that is set or disables it. On enable, the object
  * geometry will be saved, and the new geometry will change (position and
  * size) to reflect the map geometry set. If none is set yet, this may be
  * an undefined geometry, unless you have already set the map with
  * evas_object_map_set(). It is suggested you first set a map with
- * evas_object_map_set() with valid useful coordinatesm then enable and
+ * evas_object_map_set() with valid useful coordinates then enable and
  * disable the map with evas_object_map_enable_set() as needed.
  * 
  * @param obj object to enable the map on
- * @param enbled enabled state
+ * @param enabled enabled state
  */
 EAPI void
 evas_object_map_enable_set(Evas_Object *obj, Eina_Bool enabled)
@@ -291,6 +304,9 @@ evas_object_map_enable_set(Evas_Object *obj, Eina_Bool enabled)
           }
      }
    _evas_map_calc_map_geometry(obj);
+   /* This is a bit heavy handed, but it fixes the case of same geometry, but
+    * changed colour or UV settings. */
+   evas_object_change(obj);
 }
 
 /**
@@ -310,6 +326,43 @@ evas_object_map_enable_get(const Evas_Object *obj)
    return 0;
    MAGIC_CHECK_END();
    return obj->cur.usemap;
+}
+
+
+/**
+ * Set the map sourc eobject
+ * 
+ * This sets the object from which the map is taken - can be any object that
+ * has map enabled on it.
+ * 
+ * Currently not implemented. for future use.
+ * 
+ * @param obj object to set the map source of
+ * @param src the source object from which the map is taken
+ */
+EAPI void
+evas_object_map_source_set(Evas_Object *obj, Evas_Object *src)
+{
+   MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
+   return;
+   MAGIC_CHECK_END();
+}
+
+/**
+ * get the map source object
+ * 
+ * See evas_object_map_source_set()
+ * 
+ * @param obj object to set the map source of
+ * @return the object set as the source
+ */
+EAPI Evas_Object *
+evas_object_map_source_get(const Evas_Object *obj)
+{
+   MAGIC_CHECK(obj, Evas_Object, MAGIC_OBJ);
+   return NULL;
+   MAGIC_CHECK_END();
+   return NULL;
 }
 
 /**
@@ -371,10 +424,11 @@ evas_object_map_set(Evas_Object *obj, const Evas_Map *map)
              obj->prev.geometry = obj->cur.map->normal_geometry;
              if (!obj->prev.map)
                {
-		  _evas_map_free(obj->cur.map);
+		  _evas_map_free(obj, obj->cur.map);
                   obj->cur.map = NULL;
                   return;
                }
+             _evas_map_free(obj, obj->cur.map);
              obj->cur.map = NULL;
              if (!obj->cur.usemap) _evas_map_calc_geom_change(obj);
              else _evas_map_calc_map_geometry(obj);
@@ -546,7 +600,7 @@ EAPI void
 evas_map_free(Evas_Map *m)
 {
    if (!m) return;
-   _evas_map_free(m);
+   _evas_map_free(NULL, m);
 }
 
 /**
@@ -1092,14 +1146,14 @@ evas_map_util_3d_rotate(Evas_Map *m, double dx, double dy, double dz,
  * @param lr light red value (0 - 255)
  * @param lg light green value (0 - 255)
  * @param lb light blue value (0 - 255)
- * @param lr ambient color red value (0 - 255)
- * @param lg ambient color green value (0 - 255)
- * @param lb ambient color blue value (0 - 255)
+ * @param ar ambient color red value (0 - 255)
+ * @param ag ambient color green value (0 - 255)
+ * @param ab ambient color blue value (0 - 255)
  */
 EAPI void
 evas_map_util_3d_lighting(Evas_Map *m, 
                           Evas_Coord lx, Evas_Coord ly, Evas_Coord lz,
-                          int lr, int lg, int lb, int ar, int ab, int ag)
+                          int lr, int lg, int lb, int ar, int ag, int ab)
 {
    int i;
    
@@ -1265,3 +1319,7 @@ evas_map_util_clockwise_get(Evas_Map *m)
    if (count > 0) return 1;
    return 0;
 }
+
+/**
+ * @}
+ */

@@ -9,6 +9,10 @@
 # include "config.h"  /* so that EAPI in Evas.h is correctly defined */
 #endif
 
+#ifdef HAVE_EVIL
+# include <Evil.h>
+#endif
+
 #include <Eina.h>
 #include "Evas.h"
 
@@ -119,6 +123,10 @@ extern EAPI int _evas_log_dom_global;
 # undef BUILD_PIPE_RENDER
 #endif
 
+#if defined(BUILD_ASYNC_PRELOAD) && !defined(BUILD_PTHREAD)
+# define BUILD_PTHREAD
+#endif
+
 #ifdef BUILD_PTHREAD
 
 #ifndef __USE_GNU
@@ -128,7 +136,14 @@ extern EAPI int _evas_log_dom_global;
 # include <pthread.h>
 # include <sched.h>
 # define LK(x)  pthread_mutex_t x
+#ifndef EVAS_FRAME_QUEUING
 # define LKI(x) pthread_mutex_init(&(x), NULL);
+#else
+# define LKI(x) {pthread_mutexattr_t    attr;\
+         pthread_mutexattr_init(&attr); \
+         pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);	\
+         pthread_mutex_init(&(x), &attr);}
+#endif
 # define LKD(x) pthread_mutex_destroy(&(x));
 # define LKL(x) pthread_mutex_lock(&(x));
 # define LKT(x) pthread_mutex_trylock(&(x));
@@ -136,6 +151,15 @@ extern EAPI int _evas_log_dom_global;
 # define TH(x)  pthread_t x
 # define THI(x) int x
 # define TH_MAX 8
+
+/* for rwlocks */
+#define RWLK(x) pthread_rwlock_t x
+#define RWLKI(x) pthread_rwlock_init(&(x), NULL);
+#define RWLKD(x) pthread_rwlock_destroy(&(x));
+#define RDLKL(x) pthread_rwlock_rdlock(&(x));
+#define WRLKL(x) pthread_rwlock_wrlock(&(x));
+#define RWLKU(x) pthread_rwlock_unlock(&(x));
+
 
 // even though in theory having every Nth rendered line done by a different
 // thread might even out load across threads - it actually slows things down.
@@ -151,6 +175,15 @@ extern EAPI int _evas_log_dom_global;
 # define TH(x)
 # define THI(x)
 # define TH_MAX 0
+
+/* for rwlocks */
+#define RWLK(x) 
+#define RWLKI(x) 
+#define RWLKD(x)
+#define RDLKL(x) 
+#define WRLKL(x)
+#define RWLKU(x)
+
 #endif
 
 #ifdef HAVE_ALLOCA_H
@@ -335,6 +368,7 @@ typedef struct _Image_Entry             Image_Entry;
 typedef struct _Image_Entry_Flags	Image_Entry_Flags;
 typedef struct _Engine_Image_Entry      Engine_Image_Entry;
 typedef struct _Evas_Cache_Target       Evas_Cache_Target;
+typedef struct _Evas_Preload_Pthread    Evas_Preload_Pthread;
 
 typedef struct _RGBA_Image_Loadopts   RGBA_Image_Loadopts;
 #ifdef BUILD_PIPE_RENDER
@@ -353,6 +387,7 @@ typedef struct _RGBA_Gradient2         RGBA_Gradient2;
 typedef struct _RGBA_Gradient2_Type    RGBA_Gradient2_Type;
 typedef struct _RGBA_Gradient2_Color_Np_Stop   RGBA_Gradient2_Color_Np_Stop;
 typedef struct _RGBA_Polygon_Point    RGBA_Polygon_Point;
+typedef struct _RGBA_Map_Point        RGBA_Map_Point;
 typedef struct _RGBA_Font             RGBA_Font;
 typedef struct _RGBA_Font_Int         RGBA_Font_Int;
 typedef struct _RGBA_Font_Source      RGBA_Font_Source;
@@ -369,6 +404,17 @@ typedef struct _Tilebuf_Tile            Tilebuf_Tile;
 typedef struct _Tilebuf_Rect		Tilebuf_Rect;
 
 typedef struct _Evas_Common_Transform        Evas_Common_Transform;
+
+// RGBA_Map_Point
+// all coords are 20.12
+// fp type - an int for now
+typedef int FPc;
+// fp # of bits of float accuracy
+#define FP 8
+// fp half (half of an fp unit)
+#define FPH (1 << (FP - 1))
+// one fp unit
+#define FP1 (1 << (FP))
 
 /*
 typedef struct _Regionbuf             Regionbuf;
@@ -406,6 +452,7 @@ typedef enum _RGBA_Image_Flags
 /*    RGBA_IMAGE_ALPHA_SPARSE  = (1 << 5), */
 /*    RGBA_IMAGE_LOADED        = (1 << 6), */
 /*    RGBA_IMAGE_NEED_DATA     = (1 << 7) */
+   RGBA_IMAGE_TODO_LOAD     = (1 << 8),
 } RGBA_Image_Flags;
 
 typedef enum _Convert_Pal_Mode
@@ -460,6 +507,7 @@ struct _RGBA_Image_Loadopts
 struct _Image_Entry_Flags
 {
    Eina_Bool loaded       : 1;
+   Eina_Bool in_progress  : 1;
    Eina_Bool dirty        : 1;
    Eina_Bool activ        : 1;
    Eina_Bool need_data    : 1;
@@ -468,9 +516,9 @@ struct _Image_Entry_Flags
    Eina_Bool alpha        : 1;
    Eina_Bool alpha_sparse : 1;
 #ifdef BUILD_ASYNC_PRELOAD
-   Eina_Bool preload      : 1;
+   Eina_Bool preload_done : 1;
+   Eina_Bool delete_me    : 1;
    Eina_Bool pending      : 1;
-   Eina_Bool in_pipe	  : 1;
 #endif
 };
 
@@ -478,6 +526,7 @@ struct _Evas_Cache_Target
 {
   EINA_INLIST;
   const void *target;
+  void *data;
 };
 
 struct _Image_Entry
@@ -492,11 +541,15 @@ struct _Image_Entry
    const char            *key;
 
    Evas_Cache_Target     *targets;
+   Evas_Preload_Pthread   *preload;
 
    time_t                 timestamp;
    time_t                 laststat;
 
    int                    references;
+#ifdef EVAS_FRAME_QUEUING
+   LK(lock_references);   // needed for accessing references
+#endif
 
    unsigned char          scale;
 
@@ -606,6 +659,8 @@ struct _RGBA_Draw_Context
 };
 
 #ifdef BUILD_PIPE_RENDER
+#include "../engines/common/evas_map_image.h"
+
 struct _RGBA_Pipe_Op
 {
    RGBA_Draw_Context         context;
@@ -641,6 +696,12 @@ struct _RGBA_Pipe_Op
 	 int                 smooth;
 	 char               *text;
       } image;
+      struct {
+	 RGBA_Image         *src;
+	 RGBA_Map_Point     *p;
+	 int                 smooth;
+	 int                 level;
+      } map4;
    } op;
 };
 
@@ -677,6 +738,12 @@ struct _RGBA_Image
    void                *extended_info;
 #ifdef BUILD_PIPE_RENDER
    RGBA_Pipe           *pipe;
+#ifdef EVAS_FRAME_QUEUING
+   LK(ref_fq_add);
+   LK(ref_fq_del);
+   pthread_cond_t cond_fq_del;
+   int ref_fq[2];		// ref_fq[0] is for addition, ref_fq[1] is for deletion
+#endif
 #endif
    int                  ref;
 
@@ -760,6 +827,13 @@ struct _RGBA_Gradient
      } type;
 
    int references;
+#ifdef EVAS_FRAME_QUEUING
+   LK(ref_fq_add);
+   LK(ref_fq_del);
+   pthread_cond_t cond_fq_del;
+   int ref_fq[2];	//ref_fq[0] is for addition,
+                         //ref_fq[1] is for deletion
+#endif
 
    Eina_Bool imported_data : 1;
    Eina_Bool has_alpha : 1;
@@ -817,6 +891,13 @@ struct _RGBA_Gradient2
      } type;
 
    int references;
+#ifdef EVAS_FRAME_QUEUING
+   LK(ref_fq_add);
+   LK(ref_fq_del);
+   pthread_cond_t cond_fq_del;
+   int ref_fq[2];	//ref_fq[0] is for addition,
+                         //ref_fq[1] is for deletion
+#endif
 
    Eina_Bool has_alpha : 1;
 };
@@ -842,19 +923,69 @@ struct _RGBA_Polygon_Point
    int               x, y;
 };
 
+struct _RGBA_Map_Point
+{
+   FPc x, y; // x, y screenspace
+   FPc z; // z in world space. optional
+   FPc u, v; // u, v in tex coords
+   DATA32 col; // color at this point
+};
+
+// for fonts...
+/////
+typedef struct _Fash_Item_Index_Map Fash_Item_Index_Map;
+typedef struct _Fash_Int_Map Fash_Int_Map;
+typedef struct _Fash_Int Fash_Int;
+struct _Fash_Item_Index_Map
+{
+   RGBA_Font_Int *fint;
+   int            index;
+};
+struct _Fash_Int_Map
+{
+  Fash_Item_Index_Map item[256];
+};
+struct _Fash_Int
+{
+   Fash_Int_Map *bucket[256];
+   void (*freeme) (Fash_Int *fash);
+};
+
+/////
+typedef struct _Fash_Glyph_Map Fash_Glyph_Map;
+typedef struct _Fash_Glyph Fash_Glyph;
+struct _Fash_Glyph_Map
+{
+   RGBA_Font_Glyph *item[256];
+};
+struct _Fash_Glyph
+{
+   Fash_Glyph_Map *bucket[256];
+   void (*freeme) (Fash_Glyph *fash);
+};
+/////
+
 struct _RGBA_Font
 {
    Eina_List *fonts;
    Font_Hint_Flags hinting;
    int references;
+   Fash_Int *fash;
+   unsigned char sizeok : 1;
    LK(lock);
+#ifdef EVAS_FRAME_QUEUING
+   LK(ref_fq_add);
+   LK(ref_fq_del);
+   pthread_cond_t cond_fq_del;
+   int ref_fq[2];		//ref_fq[0] is for addition, ref_fq[1] is for deletion
+#endif
 };
 
 struct _RGBA_Font_Int
 {
    RGBA_Font_Source *src;
 
-   int               size;
+   unsigned int      size;
    int               real_size;
    int               max_h;
 
@@ -862,18 +993,20 @@ struct _RGBA_Font_Int
       FT_Size       size;
    } ft;
 
-   Eina_Hash       *glyphs;
+//   Eina_Hash       *glyphs;
 
    LK(ft_mutex);
 
    Eina_Hash       *kerning;
-   Eina_Hash       *indexes;
+//   Eina_Hash       *indexes;
 
    int              usage;
    Font_Hint_Flags hinting;
 
    int              references;
 
+   Fash_Glyph *fash;
+   unsigned char sizeok : 1;
 };
 
 struct _RGBA_Font_Source
@@ -884,10 +1017,7 @@ struct _RGBA_Font_Source
    void             *data;
    int               data_size;
    int               current_size;
-#if 0 /* FIXME: charmap user is disabled and use a deprecated data type. */
-   Evas_Array_Hash  *charmap;
-#endif
-
+   
    struct {
       int           orig_upem;
       FT_Face       face;
@@ -1192,11 +1322,11 @@ void              evas_font_dir_cache_free(void);
 
 /*****************************************************************************/
 
-#if defined(__ARM_ARCH__) && (__ARM_ARCH__ >= 70)
+//#if defined(__ARM_ARCH__) && (__ARM_ARCH__ >= 70)
 #ifdef BUILD_NEON
 # include <arm_neon.h>
 #endif
-#endif
+//#endif
 
 #ifdef __cplusplus
 }

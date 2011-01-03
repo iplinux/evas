@@ -23,8 +23,17 @@ endif
 if !EVAS_STATIC_BUILD_GL_X11
 SUBDIRS += gl_common gl_x11
 endif
+if !EVAS_STATIC_BUILD_GL_SDL
+SUBDIRS += gl_common gl_sdl
+endif
 if !EVAS_STATIC_BUILD_QUARTZ
 SUBDIRS += quartz
+endif
+if !EVAS_STATIC_BUILD_SOFTWARE_8
+SUBDIRS += software_8
+endif
+if !EVAS_STATIC_BUILD_SOFTWARE_8_X11
+SUBDIRS += software_8_x11
 endif
 if !EVAS_STATIC_BUILD_SOFTWARE_16
 SUBDIRS += software_16

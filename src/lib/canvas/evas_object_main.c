@@ -35,7 +35,7 @@ get_layer_objects(Evas_Layer *l)
 
 /* evas internal stuff */
 Evas_Object *
-evas_object_new(void)
+evas_object_new(Evas *e)
 {
    Evas_Object *obj;
 
@@ -54,6 +54,7 @@ evas_object_free(Evas_Object *obj, int clean_layer)
 {
    int was_smart_child = 0;
 
+   evas_object_map_set(obj, NULL);
    evas_object_grabs_cleanup(obj);
    evas_object_intercept_cleanup(obj);
    if (obj->smart.parent) was_smart_child = 1;
@@ -349,12 +350,6 @@ evas_object_was_inside(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
 /* routines apps will call */
 
 /**
- * @defgroup Evas_Object_Group Generic Object Functions
- *
- * Functions that manipulate generic evas objects.
- */
-
-/**
  * Deletes the given evas object and frees its memory.
  *
  * The object's 'free' callback is called when this function is called.
@@ -362,7 +357,7 @@ evas_object_was_inside(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
  * also called.
  *
  * @param   obj The given evas object.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_del(Evas_Object *obj)
@@ -373,7 +368,14 @@ evas_object_del(Evas_Object *obj)
 
    if (obj->delete_me) return;
 
+#ifdef EVAS_FRAME_QUEUING
+   evas_common_frameq_flush();
+#endif
+
+   _evas_object_event_new();
+
    evas_object_event_callback_call(obj, EVAS_CALLBACK_DEL, NULL);
+   _evas_post_event_callback_call(obj->layer->evas);
    if (obj->name) evas_object_name_set(obj, NULL);
    if (!obj->layer)
      {
@@ -384,7 +386,9 @@ evas_object_del(Evas_Object *obj)
      {
 	obj->focused = 0;
 	obj->layer->evas->focused = NULL;
+	_evas_object_event_new();
 	evas_object_event_callback_call(obj, EVAS_CALLBACK_FOCUS_OUT, NULL);
+        _evas_post_event_callback_call(obj->layer->evas);
      }
    obj->layer->evas->pointer.mouse_grabbed -= obj->mouse_grabbed;
    obj->mouse_grabbed = 0;
@@ -394,7 +398,9 @@ evas_object_del(Evas_Object *obj)
    if (obj->cur.clipper) evas_object_clip_unset(obj);
    if (obj->smart.smart) evas_object_smart_del(obj);
    evas_object_map_set(obj, NULL);
+   _evas_object_event_new();
    evas_object_event_callback_call(obj, EVAS_CALLBACK_FREE, NULL);
+   _evas_post_event_callback_call(obj->layer->evas);
    evas_object_smart_cleanup(obj);
    obj->delete_me = 1;
    evas_object_change(obj);
@@ -405,7 +411,7 @@ evas_object_del(Evas_Object *obj)
  * @param   obj The given evas object.
  * @param   x   X position to move the object to, in canvas units.
  * @param   y   Y position to move the object to, in canvas units.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_move(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
@@ -479,7 +485,24 @@ evas_object_move(Evas_Object *obj, Evas_Coord x, Evas_Coord y)
  * @param   obj The given evas object.
  * @param   w   The new width of the evas object.
  * @param   h   The new height of the evas object.
- * @ingroup Evas_Object_Group
+ *
+ * @note Be aware that resizing an object changes its drawing area,
+ *       but that does imply the object is rescaled! For instance,
+ *       images are filled inside their drawing area using the
+ *       specifications of evas_object_image_fill_set(), thus to scale
+ *       the image to match exactly your drawing area, you need to
+ *       change the evas_object_image_fill_set() as well. Consider the
+ *       following example:
+ *       @code
+ *       // rescale image to fill exactly its area without tiling:
+ *       evas_object_resize(img, w, h);
+ *       evas_object_image_fill_set(img, 0, 0, w, h);
+ *       @endcode
+ *       This is more evident in images, but text, textblock, lines
+ *       and polygons will behave similarly. Check their specific APIs
+ *       to know how to achive your desired behavior.
+ *
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_resize(Evas_Object *obj, Evas_Coord w, Evas_Coord h)
@@ -569,7 +592,7 @@ evas_object_resize(Evas_Object *obj, Evas_Coord w, Evas_Coord h)
  *              object.
  * @param   h   Pointer to an integer in which to store the height of the
  *              object.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_geometry_get(const Evas_Object *obj, Evas_Coord *x, Evas_Coord *y, Evas_Coord *w, Evas_Coord *h)
@@ -590,7 +613,7 @@ evas_object_geometry_get(const Evas_Object *obj, Evas_Coord *x, Evas_Coord *y, E
 }
 
 /**
- * @addtogroup Evas_Object_Group
+ * @addtogroup Evas_Object_Group_Size_Hints
  * @{
  */
 
@@ -1029,7 +1052,7 @@ evas_object_size_hint_padding_set(Evas_Object *obj, Evas_Coord l, Evas_Coord r, 
 /**
  * Makes the given evas object visible.
  * @param   obj The given evas object.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_show(Evas_Object *obj)
@@ -1078,7 +1101,13 @@ evas_object_show(Evas_Object *obj)
 /**
  * Makes the given evas object invisible.
  * @param   obj The given evas object.
- * @ingroup Evas_Object_Group
+ *
+ * @note the hidden objects will not be checked for changes and will
+ *       not catch events. That is, they are much ligher than an
+ *       object that is invisible due indirect effects, such as
+ *       clipped or out-of-viewport.
+ *
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_hide(Evas_Object *obj)
@@ -1138,6 +1167,8 @@ evas_object_hide(Evas_Object *obj)
                     {
                        Evas_Event_Mouse_Out ev;
 
+		       _evas_object_event_new();
+
                        obj->mouse_in = 0;
                        ev.buttons = obj->layer->evas->pointer.button;
                        ev.output.x = obj->layer->evas->pointer.x;
@@ -1150,6 +1181,7 @@ evas_object_hide(Evas_Object *obj)
 		       ev.timestamp = obj->layer->evas->last_timestamp;
 		       ev.event_flags = EVAS_EVENT_FLAG_NONE;
                        evas_object_event_callback_call(obj, EVAS_CALLBACK_MOUSE_OUT, &ev);
+                       _evas_post_event_callback_call(obj->layer->evas);
 		    }
 	       }
 	  }
@@ -1168,7 +1200,7 @@ evas_object_hide(Evas_Object *obj)
  * Retrieves whether or not the given evas object is visible.
  * @param   obj The given evas object.
  * @return  @c 1 if the object is visible.  @c 0 otherwise.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI Eina_Bool
 evas_object_visible_get(const Evas_Object *obj)
@@ -1187,7 +1219,7 @@ evas_object_visible_get(const Evas_Object *obj)
  * @param g   The green component of the given colour.
  * @param b   The blue component of the given colour.
  * @param a   The alpha component of the given colour.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_color_set(Evas_Object *obj, int r, int g, int b, int a)
@@ -1234,7 +1266,7 @@ evas_object_color_set(Evas_Object *obj, int r, int g, int b, int a)
  *              the colour.
  * @param   a   Pointer to an integer in which to store the alpha component of
  *              the colour.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI void
 evas_object_color_get(const Evas_Object *obj, int *r, int *g, int *b, int *a)
@@ -1259,7 +1291,7 @@ evas_object_color_get(const Evas_Object *obj, int *r, int *g, int *b, int *a)
  *
  * @param   obj The given evas object.
  * @param   anti_alias 1 if the object is to be anti_aliased, 0 otherwise.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI void
 evas_object_anti_alias_set(Evas_Object *obj, Eina_Bool anti_alias)
@@ -1279,7 +1311,7 @@ evas_object_anti_alias_set(Evas_Object *obj, Eina_Bool anti_alias)
  * Retrieves whether or not the given evas object is to be drawn anti_aliased.
  * @param   obj The given evas object.
  * @return  @c 1 if the object is to be anti_aliased.  @c 0 otherwise.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI Eina_Bool
 evas_object_anti_alias_get(const Evas_Object *obj)
@@ -1296,7 +1328,7 @@ evas_object_anti_alias_get(const Evas_Object *obj)
  *
  * @param   obj The given evas object.
  * @param   scale The scaling factor. 1.0 == none.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI void
 evas_object_scale_set(Evas_Object *obj, double scale)
@@ -1318,7 +1350,7 @@ evas_object_scale_set(Evas_Object *obj, double scale)
  * @param   obj The given evas object.
  * @return  The scaling factor.
  *
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI double
 evas_object_scale_get(const Evas_Object *obj)
@@ -1336,7 +1368,7 @@ evas_object_scale_get(const Evas_Object *obj)
  * @param   obj The given evas object.
  * @param   color_space one of EVAS_COLOR_SPACE_ARGB or EVAS_COLOR_SPACE_AHSV.
  *
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI void
 evas_object_color_interpolation_set(Evas_Object *obj, int color_space)
@@ -1356,7 +1388,7 @@ evas_object_color_interpolation_set(Evas_Object *obj, int color_space)
  * Retrieves the current value of the color space used for linear interpolation.
  * @param   obj The given evas object.
  * @return  @c EVAS_COLOR_SPACE_ARGB or EVAS_COLOR_SPACE_AHSV.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI int
 evas_object_color_interpolation_get(const Evas_Object *obj)
@@ -1372,7 +1404,7 @@ evas_object_color_interpolation_get(const Evas_Object *obj)
  * Sets the render_op to be used for rendering the evas object.
  * @param   obj The given evas object.
  * @param   render_op one of the Evas_Render_Op values.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI void
 evas_object_render_op_set(Evas_Object *obj, Evas_Render_Op render_op)
@@ -1392,7 +1424,7 @@ evas_object_render_op_set(Evas_Object *obj, Evas_Render_Op render_op)
  * Retrieves the current value of the operation used for rendering the evas object.
  * @param   obj The given evas object.
  * @return  one of the enumerated values in Evas_Render_Op.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI Evas_Render_Op
 evas_object_render_op_get(const Evas_Object *obj)
@@ -1408,7 +1440,7 @@ evas_object_render_op_get(const Evas_Object *obj)
  * Retrieves the evas that the given evas object is on.
  * @param   obj The given evas object.
  * @return  The evas that the object is on.
- * @ingroup Evas_Object_Group
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI Evas *
 evas_object_evas_get(const Evas_Object *obj)
@@ -1421,7 +1453,7 @@ evas_object_evas_get(const Evas_Object *obj)
 }
 
 /**
- * @addtogroup Evas_Object_Group
+ * @addtogroup Evas_Object_Group_Find
  * @{
  */
 
@@ -1627,9 +1659,14 @@ evas_objects_in_rectangle_get(const Evas *e, Evas_Coord x, Evas_Coord y, Evas_Co
 }
 
 /**
+ * @}
+ */
+
+/**
  * Retrieves the name of the type of the given evas object.
  * @param   obj The given object.
  * @return  The name.
+ * @ingroup Evas_Object_Group_Basic
  */
 EAPI const char *
 evas_object_type_get(const Evas_Object *obj)
@@ -1646,6 +1683,7 @@ evas_object_type_get(const Evas_Object *obj)
  * @param obj The given object.
  * @param precise wheter to use a precise point collision detection or not
  * The default value is false.
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI void
 evas_object_precise_is_inside_set(Evas_Object *obj, Eina_Bool precise)
@@ -1657,8 +1695,10 @@ evas_object_precise_is_inside_set(Evas_Object *obj, Eina_Bool precise)
 }
 
 /**
- * Determine whether an object is set to use a precise point collision detection.
+ * Determine whether an object is set to use a precise point collision
+ * detection.
  * @param obj The given object.
+ * @ingroup Evas_Object_Group_Extras
  */
 EAPI Eina_Bool
 evas_object_precise_is_inside_get(const Evas_Object *obj)
@@ -1668,7 +1708,3 @@ evas_object_precise_is_inside_get(const Evas_Object *obj)
    MAGIC_CHECK_END();
    return obj->precise_is_inside;
 }
-
-/**
- * @}
- */

@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="windows-1251"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="8,00"
-	Name="engine_software_win32_gdi"
-	ProjectGUID="{3367A64F-A08E-4F27-8303-54A3BBB01D5A}"
-	RootNamespace="engine_software_win32_gdi"
+	Version="9,00"
+	Name="loader_pmaps"
+	ProjectGUID="{73EB3790-3A72-436C-87CD-FE8747198F06}"
+	RootNamespace="loader_pmaps"
 	Keyword="Win32Proj"
+	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
 		<Platform
@@ -41,7 +42,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="$(INCLUDE)"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;EFL_EVAS_BUILD;DLL_EXPORT;__CRT_INLINE=__inline;inline=__inline;HAVE_CONFIG_H;snprintf=_snprintf_c;strcasecmp=stricmp"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;EFL_EVAS_BUILD;DLL_EXPORT;__CRT_INLINE=__inline;inline=__inline;HAVE_CONFIG_H;snprintf=_snprintf_c;strcasecmp=_stricmp;__UNUSED__="
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -66,12 +67,14 @@
 				LinkLibraryDependencies="true"
 				UseLibraryDependencyInputs="false"
 				AdditionalDependencies="libevas.lib"
-				OutputFile="$(OutDir)\engines\software_win32_gdi\module.dll"
+				OutputFile="$(OutDir)\loaders\pmaps\module.dll"
 				LinkIncremental="2"
 				AdditionalLibraryDirectories="$(LIB); $(DebugLibraryDirectory)"
 				AddModuleNamesToAssembly=""
 				GenerateDebugInformation="true"
 				SubSystem="2"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -91,9 +94,6 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
-			/>
-			<Tool
-				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -125,7 +125,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(INCLUDE)"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;EFL_EVAS_BUILD;DLL_EXPORT;__CRT_INLINE=__inline;inline=__inline;HAVE_CONFIG_H;snprintf=_snprintf_c;strcasecmp=stricmp"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;EFL_EVAS_BUILD;DLL_EXPORT;__CRT_INLINE=__inline;inline=__inline;HAVE_CONFIG_H;snprintf=_snprintf_c;strcasecmp=_stricmp;__UNUSED__="
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
@@ -148,7 +148,7 @@
 				LinkLibraryDependencies="true"
 				UseLibraryDependencyInputs="false"
 				AdditionalDependencies="libevas.lib"
-				OutputFile="$(OutDir)\engines\software_win32_gdi\module.dll"
+				OutputFile="$(OutDir)\loaders\pmaps\module.dll"
 				LinkIncremental="1"
 				AdditionalLibraryDirectories="$(LIB); $(ReleaseLibraryDirectory)"
 				AddModuleNamesToAssembly=""
@@ -156,6 +156,8 @@
 				SubSystem="2"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
+				RandomizedBaseAddress="1"
+				DataExecutionPrevention="0"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -177,9 +179,6 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
-				Name="VCWebDeploymentTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -192,14 +191,6 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath="..\..\src\modules\engines\software_win32_gdi\evas_engine.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\src\modules\engines\software_win32_gdi\Evas_Engine_Software_Win32_GDI.h"
-				>
-			</File>
 		</Filter>
 		<Filter
 			Name="Resource Files"
@@ -213,19 +204,7 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\..\src\modules\engines\software_win32_gdi\evas_engine.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\src\modules\engines\software_win32_gdi\evas_outbuf.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\src\modules\engines\software_win32_gdi\evas_win32_buffer.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\src\modules\engines\software_win32_gdi\evas_win32_main.c"
+				RelativePath="..\..\src\modules\loaders\pmaps\evas_image_load_pmaps.c"
 				>
 			</File>
 		</Filter>

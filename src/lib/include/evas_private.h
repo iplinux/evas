@@ -49,6 +49,8 @@ typedef struct _Evas_Key_Grab               Evas_Key_Grab;
 typedef struct _Evas_Callbacks              Evas_Callbacks;
 typedef struct _Evas_Format                 Evas_Format;
 typedef struct _Evas_Map_Point              Evas_Map_Point;
+typedef struct _Evas_Smart_Cb_Description_Array Evas_Smart_Cb_Description_Array;
+typedef struct _Evas_Post_Callback          Evas_Post_Callback;
 
 #define MAGIC_EVAS                 0x70777770
 #define MAGIC_OBJ                  0x71777770
@@ -173,6 +175,12 @@ struct _Evas_Intercept_Func
    Evas_Intercept_Func_Basic   clip_unset;
 };
 
+struct _Evas_Smart_Cb_Description_Array
+{
+   unsigned int                      size;
+   const Evas_Smart_Cb_Description **array;
+};
+
 struct _Evas_Smart
 {
    DATA32            magic;
@@ -180,6 +188,8 @@ struct _Evas_Smart
    int               usage;
 
    const Evas_Smart_Class *smart_class;
+
+   Evas_Smart_Cb_Description_Array callbacks;
 
    unsigned char     delete_me : 1;
    unsigned char     class_allocated : 1;
@@ -202,6 +212,14 @@ struct _Evas_Lock
       char    **list;
    } lock;
    Evas_Modifier_Mask mask; /* we have a max of 64 locks */
+};
+
+struct _Evas_Post_Callback
+{
+   Evas_Object               *obj;
+   Evas_Object_Event_Post_Cb  func;
+   const void                *data;
+   unsigned char              delete_me : 1;
 };
 
 struct _Evas_Callbacks
@@ -295,6 +313,10 @@ struct _Evas
    Eina_Array     calculate_objects;
    Eina_Array     clip_changes;
 
+   Eina_List     *post_events; // free me on evas_free
+   
+   Evas_Callbacks *callbacks;
+
    int            delete_grabs;
    int            walking_grabs;
    Eina_List     *grabs;
@@ -313,6 +335,7 @@ struct _Evas
    unsigned char  delete_me : 1;
    unsigned char  invalidate : 1;
    unsigned char  cleanup : 1;
+   unsigned char  focus : 1;
 };
 
 struct _Evas_Layer
@@ -449,6 +472,8 @@ struct _Evas_Object
    int                         last_mouse_up_counter;
    int                         mouse_grabbed;
 
+   int                         last_event;
+
    Evas_Object_Pointer_Mode    pointer_mode : 1;
 
    Eina_Bool                   store : 1;
@@ -478,7 +503,7 @@ struct _Evas_Object
 struct _Evas_Func_Node
 {
    EINA_INLIST;
-   void (*func) (void *data, Evas *e, Evas_Object *obj, void *event_info);
+   void (*func) ();
    void *data;
    Evas_Callback_Type type;
    unsigned char delete_me : 1;
@@ -567,6 +592,7 @@ struct _Evas_Func
    void (*output_redraws_next_update_push) (void *data, void *surface, int x, int y, int w, int h);
    void (*output_flush)                    (void *data);
    void (*output_idle_flush)               (void *data);
+   void (*output_dump)                     (void *data);
 
    void *(*context_new)                    (void *data);
    Eina_Bool (*canvas_alpha_get)           (void *data, void *context);
@@ -595,7 +621,7 @@ struct _Evas_Func
 
    void *(*polygon_point_add)              (void *data, void *context, void *polygon, int x, int y);
    void *(*polygon_points_clear)           (void *data, void *context, void *polygon);
-   void (*polygon_draw)                    (void *data, void *context, void *surface, void *polygon);
+   void (*polygon_draw)                    (void *data, void *context, void *surface, void *polygon, int x, int y);
 
    void (*gradient2_color_np_stop_insert)   (void *data, void *gradient, int r, int g, int b, int a, float pos);
    void (*gradient2_clear)                  (void *data, void *gradient);
@@ -702,13 +728,14 @@ struct _Evas_Func
 
    void (*image_map4_draw)                 (void *data, void *context, void *surface, void *image, RGBA_Map_Point *p, int smooth, int level);
    void *(*image_map_surface_new)          (void *data, int w, int h, int alpha);
-   void *(*image_map_surface_free)         (void *data, void *surface);
+   void (*image_map_surface_free)          (void *data, void *surface);
 };
 
 struct _Evas_Image_Load_Func
 {
-  int (*file_head) (Image_Entry *ie, const char *file, const char *key);
-  int (*file_data) (Image_Entry *ie, const char *file, const char *key);
+  Eina_Bool threadable;
+  Eina_Bool (*file_head) (Image_Entry *ie, const char *file, const char *key, int *error);
+  Eina_Bool (*file_data) (Image_Entry *ie, const char *file, const char *key, int *error);
 };
 
 struct _Evas_Image_Save_Func
@@ -720,7 +747,7 @@ struct _Evas_Image_Save_Func
 extern "C" {
 #endif
 
-Evas_Object *evas_object_new(void);
+Evas_Object *evas_object_new(Evas *e);
 void evas_object_free(Evas_Object *obj, int clean_layer);
 void evas_object_inject(Evas_Object *obj, Evas *e);
 void evas_object_release(Evas_Object *obj, int clean_layer);
@@ -748,6 +775,7 @@ int evas_object_was_opaque(Evas_Object *obj);
 int evas_object_is_inside(Evas_Object *obj, Evas_Coord x, Evas_Coord y);
 int evas_object_was_inside(Evas_Object *obj, Evas_Coord x, Evas_Coord y);
 int evas_object_clippers_was_visible(Evas_Object *obj);
+void evas_event_callback_call(Evas *e, Evas_Callback_Type type, void *event_info);
 void evas_object_event_callback_call(Evas_Object *obj, Evas_Callback_Type type, void *event_info);
 Eina_List *evas_event_objects_event_list(Evas *e, Evas_Object *stop, int x, int y);
 int evas_mem_free(int mem_required);
@@ -760,6 +788,10 @@ void evas_debug_generic(const char *str);
 const char *evas_debug_magic_string_get(DATA32 magic);
 void evas_object_smart_use(Evas_Smart *s);
 void evas_object_smart_unuse(Evas_Smart *s);
+void evas_smart_cb_descriptions_fix(Evas_Smart_Cb_Description_Array *a) EINA_ARG_NONNULL(1);
+Eina_Bool evas_smart_cb_descriptions_resize(Evas_Smart_Cb_Description_Array *a, unsigned int size) EINA_ARG_NONNULL(1);
+const Evas_Smart_Cb_Description *evas_smart_cb_description_find(const Evas_Smart_Cb_Description_Array *a, const char *name) EINA_ARG_NONNULL(1, 2) EINA_PURE;
+
 void evas_object_smart_del(Evas_Object *obj);
 void evas_object_smart_cleanup(Evas_Object *obj);
 void evas_object_smart_member_raise(Evas_Object *member);
@@ -769,8 +801,13 @@ void evas_object_smart_member_stack_below(Evas_Object *member, Evas_Object *othe
 const Eina_Inlist *evas_object_smart_members_get_direct(const Evas_Object *obj);
 void evas_call_smarts_calculate(Evas *e);
 void *evas_mem_calloc(int size);
+void _evas_post_event_callback_call(Evas *e);
+void _evas_post_event_callback_free(Evas *e);
+void evas_event_callback_list_post_free(Eina_Inlist **list);
 void evas_object_event_callback_all_del(Evas_Object *obj);
 void evas_object_event_callback_cleanup(Evas_Object *obj);
+void evas_event_callback_all_del(Evas *e);
+void evas_event_callback_cleanup(Evas *e);
 void evas_object_inform_call_show(Evas_Object *obj);
 void evas_object_inform_call_hide(Evas_Object *obj);
 void evas_object_inform_call_move(Evas_Object *obj);
@@ -808,6 +845,7 @@ void _evas_object_text_rehint(Evas_Object *obj);
 void _evas_object_textblock_rehint(Evas_Object *obj);
 
 extern int _evas_alloc_error;
+extern int _evas_event_counter;
 
 struct _Evas_Imaging_Image
 {
@@ -822,7 +860,15 @@ struct _Evas_Imaging_Font
 int evas_async_events_init(void);
 int evas_async_events_shutdown(void);
 int evas_async_target_del(const void *target);
-       
+
+void _evas_preload_thread_init(void);
+void _evas_preload_thread_shutdown(void);
+Evas_Preload_Pthread *evas_preload_thread_run(void (*func_heavy)(void *data),
+					     void (*func_end)(void *data),
+					     void (*func_cancel)(void *data),
+					     const void *data);
+Eina_Bool evas_preload_thread_cancel(Evas_Preload_Pthread *thread);
+
 void _evas_walk(Evas *e);
 void _evas_unwalk(Evas *e);
 

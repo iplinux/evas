@@ -20,6 +20,53 @@ int test ;
 /* function tables - filled in later (func and parent func) */
 static Evas_Func func, pfunc;
 
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+struct xrdb_user
+{
+   time_t last_stat;
+   time_t last_mtime;
+   XrmDatabase db;
+};
+static struct xrdb_user xrdb_user = {0, 0, NULL};
+
+static Eina_Bool
+xrdb_user_query(const char *name, const char *cls, char **type, XrmValue *val)
+{
+   time_t last = xrdb_user.last_stat, now = time(NULL);
+
+   xrdb_user.last_stat = now;
+   if (last != now) /* don't stat() more than once every second */
+     {
+	struct stat st;
+	const char *home = getenv("HOME");
+	char tmp[PATH_MAX];
+
+	if (!home) goto failed;
+	snprintf(tmp, sizeof(tmp), "%s/.Xdefaults", home);
+	if (stat(tmp, &st) != 0) goto failed;
+	if (xrdb_user.last_mtime != st.st_mtime)
+	  {
+	     if (xrdb_user.db) XrmDestroyDatabase(xrdb_user.db);
+	     xrdb_user.db = XrmGetFileDatabase(tmp);
+	     if (!xrdb_user.db) goto failed;
+	     xrdb_user.last_mtime = st.st_mtime;
+	  }
+     }
+
+   if (!xrdb_user.db) return EINA_FALSE;
+   return XrmGetResource(xrdb_user.db, name, cls, type, val);
+
+ failed:
+   if (xrdb_user.db)
+     {
+	XrmDestroyDatabase(xrdb_user.db);
+	xrdb_user.db = NULL;
+     }
+   xrdb_user.last_mtime = 0;
+   return EINA_FALSE;
+}
+#endif
+
 /* engine struct data */
 typedef struct _Render_Engine Render_Engine;
 
@@ -30,6 +77,16 @@ struct _Render_Engine
    Tilebuf_Rect *rects;
    Eina_Inlist  *cur_rect;
    int           end : 1;
+   
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+   XrmDatabase   xrdb; // xres - dpi
+   struct { // xres - dpi
+      int        dpi; // xres - dpi
+   } xr; // xres - dpi
+#endif
+#ifdef EVAS_FRAME_QUEUING
+   Evas_Engine_Render_Mode render_mode;
+#endif
 
    void        (*outbuf_free)(Outbuf *ob);
    void        (*outbuf_reconfigure)(Outbuf *ob, int w, int h, int rot, Outbuf_Depth depth);
@@ -40,6 +97,9 @@ struct _Render_Engine
    void        (*outbuf_flush)(Outbuf *ob);
    void        (*outbuf_idle_flush)(Outbuf *ob);
    Eina_Bool   (*outbuf_alpha_get)(Outbuf *ob);
+#ifdef EVAS_FRAME_QUEUING
+   void		(*outbuf_set_priv)(Outbuf *ob, void *cur, void *prev);
+#endif
 };
 
 /* prototypes we will use here */
@@ -91,6 +151,60 @@ _output_xlib_setup(int      w,
    evas_software_xlib_x_color_init();
    evas_software_xlib_outbuf_init();
 
+     {
+        int status;
+        char *type = NULL;
+        XrmValue val;
+        
+        re->xr.dpi = 75000; // dpy * 1000
+
+	status = xrdb_user_query("Xft.dpi", "Xft.Dpi", &type, &val);
+	if ((!status) || (!type))
+	  {
+	     if (!re->xrdb) re->xrdb = XrmGetDatabase(disp);
+	     if (re->xrdb)
+	       status = XrmGetResource(re->xrdb,
+				       "Xft.dpi", "Xft.Dpi", &type, &val);
+	  }
+
+        if ((status) && (type))
+          {
+             if (!strcmp(type, "String"))
+               {
+                  const char *str, *dp;
+                  
+                  str = val.addr;
+                  dp = strchr(str, '.');
+                  if (!dp) dp = strchr(str, ',');
+                  
+                  if (dp)
+                    {
+                       int subdpi, len, i;
+                       char *buf;
+                       
+                       buf = alloca(dp - str + 1);
+                       strncpy(buf, str, dp - str);
+                       buf[dp - str] = 0;
+                       len = strlen(dp + 1);
+                       subdpi = atoi(dp + 1);
+                       
+                       if (len < 3)
+                         {
+                            for (i = len; i < 3; i++) subdpi *= 10;
+                         }
+                       else if (len > 3)
+                         {
+                            for (i = len; i > 3; i--) subdpi /= 10;
+                         }
+                       re->xr.dpi = atoi(buf) * 1000;
+                    }
+                  else
+                    re->xr.dpi = atoi(str) * 1000;
+                  evas_common_font_dpi_set(re->xr.dpi / 1000);
+               }
+          }
+     }
+   
    re->ob = evas_software_xlib_outbuf_setup_x(w,
                                               h,
                                               rot,
@@ -162,6 +276,8 @@ _output_xcb_setup(int               w,
    evas_software_xcb_x_color_init();
    evas_software_xcb_outbuf_init();
 
+   // FIXME: re->xrdb
+   
    re->ob = evas_software_xcb_outbuf_setup_x(w,
                                              h,
                                              rot,
@@ -331,6 +447,7 @@ eng_info(Evas *e __UNUSED__)
    info->func.best_visual_get = _best_visual_get;
    info->func.best_colormap_get = _best_colormap_get;
    info->func.best_depth_get = _best_depth_get;
+   info->render_mode = EVAS_RENDER_MODE_BLOCKING;
    return info;
 }
 
@@ -392,6 +509,10 @@ eng_setup(Evas *e, void *in)
              re->outbuf_flush = evas_software_xlib_outbuf_flush;
              re->outbuf_idle_flush = evas_software_xlib_outbuf_idle_flush;
 	     re->outbuf_alpha_get = evas_software_xlib_outbuf_alpha_get;
+#ifdef EVAS_FRAME_QUEUING
+             re->outbuf_set_priv = evas_software_xlib_outbuf_set_priv;
+             re->render_mode = info->render_mode;
+#endif
           }
 #endif
 
@@ -432,6 +553,9 @@ eng_setup(Evas *e, void *in)
      {
 	int            ponebuf = 0;
 
+#ifdef EVAS_FRAME_QUEUING
+        evas_common_frameq_flush ();
+#endif
 	re = e->engine.data.output;
 	ponebuf = re->ob->onebuf;
 
@@ -454,6 +578,9 @@ eng_setup(Evas *e, void *in)
                                                         info->info.shape_dither,
                                                         info->info.destination_alpha);
              evas_software_xlib_outbuf_debug_set(re->ob, info->info.debug);
+#ifdef EVAS_FRAME_QUEUING
+             re->render_mode = info->render_mode;
+#endif
           }
 #endif
 
@@ -499,6 +626,12 @@ eng_output_free(void *data)
    if (!data) return;
 
    re = (Render_Engine *)data;
+
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+// NOTE: XrmGetDatabase() result is shared per connection, do not free it.
+//   if (re->xrdb) XrmDestroyDatabase(re->xrdb);
+#endif
+
    re->outbuf_free(re->ob);
    evas_common_tilebuf_free(re->tb);
    if (re->rects) evas_common_tilebuf_free_render_rects(re->rects);
@@ -598,16 +731,90 @@ static void
 eng_output_redraws_next_update_push(void *data, void *surface, int x, int y, int w, int h)
 {
    Render_Engine *re;
+#ifdef EVAS_FRAME_QUEUING
+   Evas_Surface *e_surface;
+#endif
 
    re = (Render_Engine *)data;
-#ifdef BUILD_PIPE_RENDER
-   evas_common_pipe_begin(surface);
-   evas_common_pipe_flush(surface);
-#endif   
+#if defined(BUILD_PIPE_RENDER) && !defined(EVAS_FRAME_QUEUING)
+   evas_common_pipe_map4_begin(surface);
+#endif /* BUILD_PIPE_RENDER  && !EVAS_FRAME_QUEUING*/
+
+#ifdef EVAS_FRAME_QUEUING
+   if (re->render_mode == EVAS_RENDER_MODE_NONBLOCKING)
+     {
+        /* create a new frame if this is the first surface of this frame */
+        evas_common_frameq_prepare_frame();
+        /* add surface into the frame */
+        e_surface = evas_common_frameq_new_surface(surface, x, y, w, h);
+        evas_common_frameq_add_surface(e_surface);
+        return;
+     }
+#endif
+
    re->outbuf_push_updated_region(re->ob, surface, x, y, w, h);
    re->outbuf_free_region_for_update(re->ob, surface);
    evas_common_cpu_end_opt();
 }
+
+#ifdef EVAS_FRAME_QUEUING
+static void *
+eng_image_map_surface_new(void *data , int w, int h, int alpha)
+{
+   void *surface;
+   DATA32 *pixels;
+   Render_Engine *re;
+   Evas_Surface *e_surface;
+
+   re = (Render_Engine *)data;
+
+   surface = evas_cache_image_copied_data(evas_common_image_cache_get(), 
+                                          w, h, NULL, alpha, 
+                                          EVAS_COLORSPACE_ARGB8888);
+   pixels = evas_cache_image_pixels(surface);
+
+   if (re->render_mode == EVAS_RENDER_MODE_NONBLOCKING)
+     {
+        /* create a new frame if this is the first surface of this frame */
+        evas_common_frameq_prepare_frame();
+
+        /* add surface into the frame */
+        e_surface = evas_common_frameq_new_surface (surface, 0, 0, w, h);
+        e_surface->dontpush = 1; // this surface is not going to be pushed to screen
+        evas_common_frameq_add_surface(e_surface);
+     }
+   return surface;
+}
+
+static void
+eng_output_frameq_redraws_next_update_push(void *data, void *surface, int x, int y, int w, int h)
+{
+   Render_Engine *re;
+
+   re = (Render_Engine *)data;
+   re->outbuf_push_updated_region(re->ob, surface, x, y, w, h);
+   re->outbuf_free_region_for_update(re->ob, surface);
+   evas_common_cpu_end_opt();
+}
+
+static void
+eng_output_frameq_flush(void *data)
+{
+   Render_Engine *re;
+
+   re = (Render_Engine *)data;
+   re->outbuf_flush(re->ob);
+}
+
+static void
+eng_output_frameq_set_priv(void *data, void *cur, void *prev)
+{
+   Render_Engine *re;
+
+   re = (Render_Engine *)data;
+   re->outbuf_set_priv(re->ob, cur, prev);
+}
+#endif
 
 static void
 eng_output_flush(void *data)
@@ -615,7 +822,21 @@ eng_output_flush(void *data)
    Render_Engine *re;
 
    re = (Render_Engine *)data;
-   re->outbuf_flush(re->ob);
+#ifdef EVAS_FRAME_QUEUING
+   if (re->render_mode == EVAS_RENDER_MODE_NONBLOCKING)
+     {
+        evas_common_frameq_set_frame_data(data,
+                        eng_output_frameq_redraws_next_update_push,
+                        eng_output_frameq_flush,
+                        eng_output_frameq_set_priv);
+        evas_common_frameq_ready_frame();
+        evas_common_frameq_begin();
+     } 
+   else
+#endif
+     {
+        re->outbuf_flush(re->ob);
+     }
 }
 
 static void
@@ -636,11 +857,22 @@ eng_canvas_alpha_get(void *data, void *context __UNUSED__)
    return (re->ob->priv.destination_alpha) || (re->outbuf_alpha_get(re->ob));
 }
 
+
 /* module advertising code */
 static int
 module_open(Evas_Module *em)
 {
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+   static Eina_Bool xrm_inited = EINA_FALSE;
+   if (!xrm_inited)
+     {
+	xrm_inited = EINA_TRUE;
+	XrmInitialize();
+     }
+#endif
+
    if (!em) return 0;
+
    /* get whatever engine module we inherit from */
    if (!_evas_module_engine_inherit(&pfunc, "software_generic")) return 0;
    _evas_engine_soft_x11_log_dom = eina_log_domain_register("EvasSoftX11", EVAS_DEFAULT_LOG_COLOR);
@@ -668,6 +900,10 @@ module_open(Evas_Module *em)
    ORD(output_flush);
    ORD(output_idle_flush);
    /* now advertise out own api */
+#ifdef EVAS_FRAME_QUEUING
+   ORD(image_map_surface_new);
+#endif
+
    em->functions = (void *)(&func);
    return 1;
 }
@@ -676,6 +912,15 @@ static void
 module_close(Evas_Module *em __UNUSED__)
 {
   eina_log_domain_unregister(_evas_engine_soft_x11_log_dom);
+#ifdef BUILD_ENGINE_SOFTWARE_XLIB
+  if (xrdb_user.db)
+    {
+       XrmDestroyDatabase(xrdb_user.db);
+       xrdb_user.last_stat = 0;
+       xrdb_user.last_mtime = 0;
+       xrdb_user.db = NULL;
+    }
+#endif
 }
 
 static Evas_Module_Api evas_modapi =

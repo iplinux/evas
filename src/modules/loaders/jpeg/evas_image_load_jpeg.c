@@ -25,17 +25,18 @@ static void _JPEGFatalErrorHandler(j_common_ptr cinfo);
 static void _JPEGErrorHandler(j_common_ptr cinfo);
 static void _JPEGErrorHandler2(j_common_ptr cinfo, int msg_level);
 
-static int evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f);
-static int evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f);
+static Eina_Bool evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f, int *error) EINA_ARG_NONNULL(1, 2, 3);
+static Eina_Bool evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f, int *error) EINA_ARG_NONNULL(1, 2, 3);
 #if 0 /* not used at the moment */
-static int evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f);
+static int evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f) EINA_ARG_NONNULL(1, 2);
 #endif
 
-static int evas_image_load_file_head_jpeg(Image_Entry *ie, const char *file, const char *key);
-static int evas_image_load_file_data_jpeg(Image_Entry *ie, const char *file, const char *key);
+static Eina_Bool evas_image_load_file_head_jpeg(Image_Entry *ie, const char *file, const char *key, int *error) EINA_ARG_NONNULL(1, 2, 4);
+static Eina_Bool evas_image_load_file_data_jpeg(Image_Entry *ie, const char *file, const char *key, int *error) EINA_ARG_NONNULL(1, 2, 4);
 
 static Evas_Image_Load_Func evas_image_load_jpeg_func =
 {
+  EINA_TRUE,
   evas_image_load_file_head_jpeg,
   evas_image_load_file_data_jpeg
 };
@@ -74,14 +75,13 @@ _JPEGErrorHandler2(j_common_ptr cinfo __UNUSED__, int msg_level __UNUSED__)
    return;
 }
 
-static int
-evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f)
+static Eina_Bool
+evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f, int *error)
 {
    int w, h, scalew, scaleh;
    struct jpeg_decompress_struct cinfo;
    struct _JPEG_error_mgr jerr;
 
-   if (!f) return 0;
    cinfo.err = jpeg_std_error(&(jerr.pub));
    jerr.pub.error_exit = _JPEGFatalErrorHandler;
    jerr.pub.emit_message = _JPEGErrorHandler2;
@@ -89,7 +89,11 @@ evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f)
    if (setjmp(jerr.setjmp_buffer))
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	if (cinfo.saw_JFIF_marker)
+	  *error = EVAS_LOAD_ERROR_CORRUPT_FILE;
+	else
+	  *error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;
      }
    jpeg_create_decompress(&cinfo);
    jpeg_stdio_src(&cinfo, f);
@@ -107,7 +111,11 @@ evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f)
        (IMG_TOO_BIG(w, h)))
      {
         jpeg_destroy_decompress(&cinfo);
-	return 0;
+	if (IMG_TOO_BIG(w, h))
+	  *error = EVAS_LOAD_ERROR_RESOURCE_ALLOCATION_FAILED;
+	else
+	  *error = EVAS_LOAD_ERROR_GENERIC;
+	return EINA_FALSE;
      }
    if (ie->load_opts.scale_down_by > 1)
      {
@@ -119,9 +127,9 @@ evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f)
 	w = (w * ie->load_opts.dpi) / 90.0;
 	h = (h * ie->load_opts.dpi) / 90.0;
      }
-   else if ((ie->load_opts.w) && (ie->load_opts.h))
+   else if ((ie->load_opts.w > 0) && (ie->load_opts.h > 0))
      {
-	int w2, h2;
+	int w2 = w, h2 = h;
 	if (ie->load_opts.w > 0)
 	  {
 	     w2 = ie->load_opts.w;
@@ -188,7 +196,8 @@ evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f)
         if ((ie->load_opts.region.w <= 0) || (ie->load_opts.region.h <= 0))
           {
              jpeg_destroy_decompress(&cinfo);
-             return 0;
+	     *error = EVAS_LOAD_ERROR_GENERIC;
+	     return EINA_FALSE;
           }
         ie->w = ie->load_opts.region.w;
         ie->h = ie->load_opts.region.h;
@@ -196,7 +205,8 @@ evas_image_load_file_head_jpeg_internal(Image_Entry *ie, FILE *f)
 /* end head decoding */
 
    jpeg_destroy_decompress(&cinfo);
-   return 1;
+   *error = EVAS_LOAD_ERROR_NONE;
+   return EINA_TRUE;
 }
 
 /*
@@ -210,8 +220,8 @@ get_time(void)
 }
 */
 
-static int
-evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
+static Eina_Bool
+evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f, int *error)
 {
    int w, h;
    struct jpeg_decompress_struct cinfo;
@@ -221,7 +231,6 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
    int x, y, l, i, scans, count;
    int region = 0;
 
-   if (!f) return 0;
    cinfo.err = jpeg_std_error(&(jerr.pub));
    jerr.pub.error_exit = _JPEGFatalErrorHandler;
    jerr.pub.emit_message = _JPEGErrorHandler2;
@@ -229,7 +238,8 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
    if (setjmp(jerr.setjmp_buffer))
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	*error = EVAS_LOAD_ERROR_CORRUPT_FILE;
+	return EINA_FALSE;
      }
    jpeg_create_decompress(&cinfo);
    jpeg_stdio_src(&cinfo, f);
@@ -280,13 +290,15 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
         cinfo.region_h = ie->load_opts.region.h;
 #endif
      }
-   if ((w != ie->w) || (h != ie->h))
+   if ((!region) && ((w != ie->w) || (h != ie->h)))
      {
-        // OK. region decode happening. a sub-set of the image
-//	jpeg_destroy_decompress(&cinfo);
-//	return 0;
+	// race condition, the file could have change from when we call header
+	// this test will not solve the problem with region code.
+	jpeg_destroy_decompress(&cinfo);
+	*error = EVAS_LOAD_ERROR_GENERIC;
+	return EINA_FALSE;
      }
-   if ((region) && 
+   if ((region) &&
        ((ie->w != ie->load_opts.region.w) || (ie->h != ie->load_opts.region.h)))
      {
         ie->w = ie->load_opts.region.w;
@@ -298,7 +310,8 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
          ((cinfo.out_color_space == JCS_CMYK) && (cinfo.output_components == 4))))
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	*error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;
      }
 
 /* end head decoding */
@@ -306,14 +319,16 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
    if (cinfo.rec_outbuf_height > 16)
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	*error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;
      }
    data = alloca(w * 16 * cinfo.output_components);
    evas_cache_image_surface_alloc(ie, ie->w, ie->h);
    if (ie->flags.loaded)
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 1;
+	*error = EVAS_LOAD_ERROR_NONE;
+	return EINA_TRUE;
      }
    ptr2 = evas_cache_image_pixels(ie);
    count = 0;
@@ -382,7 +397,8 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                   if (l >= (ie->load_opts.region.y + ie->load_opts.region.h))
                     {
                        jpeg_destroy_decompress(&cinfo);
-                       return 1;
+		       *error = EVAS_LOAD_ERROR_NONE;
+                       return EINA_FALSE;
                     }
                   // els if scan block intersects region start or later
                   else if ((l + scans) > 
@@ -477,8 +493,7 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                     {
                        for (x = 0; x < w; x++)
                          {
-                            *ptr2 =
-                              (0xff000000) | ((ptr[0]) << 16) | ((ptr[1]) << 8) | (ptr[2]);
+                            *ptr2 = ARGB_JOIN(0xff, ptr[0], ptr[1], ptr[2]);
                             ptr += 3;
                             ptr2++;
                          }
@@ -494,7 +509,8 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                        t = get_time() - t;
                        printf("%3.3f\n", t);
  */ 
-                       return 1;
+		       *error = EVAS_LOAD_ERROR_NONE;
+                       return EINA_TRUE;
                     }
                   // else if scan block intersects region start or later
                   else if ((l + scans) > 
@@ -508,8 +524,7 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                                  ptr += (3 * ie->load_opts.region.x);
                                  for (x = 0; x < ie->load_opts.region.w; x++)
                                    {
-                                      *ptr2 =
-                                        (0xff000000) | ((ptr[0]) << 16) | ((ptr[1]) << 8) | (ptr[2]);
+                                      *ptr2 = ARGB_JOIN(0xff, ptr[0], ptr[1], ptr[2]);
                                       ptr += 3;
                                       ptr2++;
                                    }
@@ -543,8 +558,7 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                     {
                        for (x = 0; x < w; x++)
                          {
-                            *ptr2 =
-                              (0xff000000) | ((ptr[0]) << 16) | ((ptr[0]) << 8) | (ptr[0]);
+                            *ptr2 = ARGB_JOIN(0xff, ptr[0], ptr[0], ptr[0]);
                             ptr++;
                             ptr2++;
                          }
@@ -556,7 +570,8 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                   if (l >= (ie->load_opts.region.y + ie->load_opts.region.h))
                     {
                        jpeg_destroy_decompress(&cinfo);
-                       return 1;
+		       *error = EVAS_LOAD_ERROR_NONE;
+                       return EINA_TRUE;
                     }
                   // els if scan block intersects region start or later
                   else if ((l + scans) > 
@@ -570,8 +585,7 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
                                  ptr += ie->load_opts.region.x;
                                  for (x = 0; x < ie->load_opts.region.w; x++)
                                    {
-                                      *ptr2 =
-                                        (0xff000000) | ((ptr[0]) << 16) | ((ptr[0]) << 8) | (ptr[0]);
+                                      *ptr2 = ARGB_JOIN(0xff, ptr[0], ptr[0], ptr[0]);
                                       ptr++;
                                       ptr2++;
                                    }
@@ -587,12 +601,13 @@ evas_image_load_file_data_jpeg_internal(Image_Entry *ie, FILE *f)
 /* end data decoding */
    jpeg_finish_decompress(&cinfo);
    jpeg_destroy_decompress(&cinfo);
-   return 1;
+   *error = EVAS_LOAD_ERROR_NONE;
+   return EINA_TRUE;
 }
 
 #if 0 /* not used at the moment */
-static int
-evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f)
+static Eina_Bool
+evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f, int *error)
 {
    int w, h;
    struct jpeg_decompress_struct cinfo;
@@ -601,7 +616,11 @@ evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f)
    DATA32 *ptr2;
    int x, y, l, i, scans, count, prevy;
 
-   if (!f) return 0;
+   if (!f)
+     {
+	*error = EVAS_LOAD_ERROR_DOES_NOT_EXIST;
+	return EINA_FALSE;
+     }
    cinfo.err = jpeg_std_error(&(jerr.pub));
    jerr.pub.error_exit = _JPEGFatalErrorHandler;
    jerr.pub.emit_message = _JPEGErrorHandler2;
@@ -609,7 +628,8 @@ evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f)
    if (setjmp(jerr.setjmp_buffer))
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	*error = EVAS_LOAD_ERROR_CORRUPT_FILE;
+	return EINA_FALSE;
      }
    jpeg_create_decompress(&cinfo);
    jpeg_stdio_src(&cinfo, f);
@@ -626,13 +646,15 @@ evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f)
    if (cinfo.rec_outbuf_height > 16)
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	*error = EVAS_LOAD_ERROR_UNKNOWN_FORMAT;
+	return EINA_FALSE;;
      }
    data = alloca(w * 16 * 3);
    if (!ie->flags.loaded)
      {
 	jpeg_destroy_decompress(&cinfo);
-	return 0;
+	*error = EVAS_LOAD_ERROR_NONE;
+	return EINA_TRUE;
      }
    ptr2 = evas_cache_image_pixels(ie);
    count = 0;
@@ -686,35 +708,42 @@ evas_image_load_file_data_jpeg_alpha_internal(Image_Entry *ie, FILE *f)
 /* end data decoding */
    jpeg_finish_decompress(&cinfo);
    jpeg_destroy_decompress(&cinfo);
-   return 1;
+   *error = EVAS_LOAD_ERROR_NONE;
+   return EINA_TRUE;
 }
 #endif
 
-static int
-evas_image_load_file_head_jpeg(Image_Entry *ie, const char *file, const char *key)
+static Eina_Bool
+evas_image_load_file_head_jpeg(Image_Entry *ie, const char *file, const char *key, int *error)
 {
    int val;
    FILE *f;
 
-   if ((!file)) return 0;
    f = fopen(file, "rb");
-   if (!f) return 0;
-   val = evas_image_load_file_head_jpeg_internal(ie, f);
+   if (!f)
+     {
+	*error = EVAS_LOAD_ERROR_DOES_NOT_EXIST;
+	return EINA_FALSE;
+     }
+   val = evas_image_load_file_head_jpeg_internal(ie, f, error);
    fclose(f);
    return val;
    key = 0;
 }
 
-static int
-evas_image_load_file_data_jpeg(Image_Entry *ie, const char *file, const char *key)
+static Eina_Bool
+evas_image_load_file_data_jpeg(Image_Entry *ie, const char *file, const char *key, int *error)
 {
    int val;
    FILE *f;
 
-   if ((!file)) return 0;
    f = fopen(file, "rb");
-   if (!f) return 0;
-   val = evas_image_load_file_data_jpeg_internal(ie, f);
+   if (!f)
+     {
+	*error = EVAS_LOAD_ERROR_DOES_NOT_EXIST;
+	return EINA_FALSE;
+     }
+   val = evas_image_load_file_data_jpeg_internal(ie, f, error);
    fclose(f);
    return val;
    key = 0;

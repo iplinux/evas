@@ -9,6 +9,7 @@
 # include <X11/Xutil.h>
 # include <X11/Xatom.h>
 # include <X11/extensions/XShm.h>
+# include <X11/Xresource.h> // xres - dpi
 #endif
 
 #ifdef BUILD_ENGINE_SOFTWARE_XCB
@@ -112,6 +113,10 @@ struct _Outbuf
       Eina_List   *pending_writes;
       /* a list of previous frame pending regions to write to the target */
       Eina_List   *prev_pending_writes;
+#ifdef EVAS_FRAME_QUEUING
+      /* protecting prev_pending_writes */
+      LK(lock);
+#endif
 
       unsigned char mask_dither : 1;
       unsigned char destination_alpha : 1;
